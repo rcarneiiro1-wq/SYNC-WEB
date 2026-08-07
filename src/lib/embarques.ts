@@ -46,6 +46,7 @@ export type LinhaEmbarque = {
   diasEmbarcado: number | null;
   dataInicioReal: string | null;
   itensAvanco: ItensPorStatus;
+  rdosPendentes: number;
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -160,14 +161,22 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   return embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
     const inicioReal = dataMaisAntiga(embarque.data_inicio, listaRdos);
+    const diasEmbarcado = diasDesde(inicioReal);
+    // assume 1 RDO por dia (confirmado que é sempre assim nessa operação) -
+    // se "dias a bordo" for maior que o número de RDOs lançados, é sinal de
+    // que faltou lançar/sincronizar RDO de algum dia (comum offshore, com
+    // internet ruim) - o % de avanço mostrado, nesse caso, é só o do último
+    // RDO que chegou, não necessariamente reflete o dia de hoje
+    const rdosPendentes = Math.max(0, (diasEmbarcado ?? 0) - listaRdos.length);
     return {
       embarque,
       obra: obrasPorId.get(embarque.obra_id) || null,
       totalRdos: listaRdos.length,
       percentual: percentualDoRdo(listaRdos[0]),
-      diasEmbarcado: diasDesde(inicioReal),
+      diasEmbarcado,
       dataInicioReal: inicioReal,
       itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
+      rdosPendentes,
     };
   });
 }

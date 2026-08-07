@@ -11,8 +11,9 @@ function corPercentual(percentual: number | null): string {
 }
 
 function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
-  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco } = linha;
+  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes } = linha;
   const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
+  const temPendencia = rdosPendentes > 0;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
@@ -21,9 +22,16 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           <p className="font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
           <p className="text-sm text-gray-500">{embarque.efetivo_funcao || "Função não informada"}</p>
         </div>
-        <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${corPercentual(percentual)}`}>
-          {percentual !== null ? `${percentual}%` : "sem dados"}
-        </span>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${corPercentual(percentual)}`}>
+            {percentual !== null ? `${percentual}%` : "sem dados"}
+          </span>
+          {temPendencia && (
+            <span className="text-[10px] text-amarelo font-medium whitespace-nowrap">
+              defasado {rdosPendentes}d
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="h-px bg-gray-100" />
@@ -46,7 +54,24 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
 
         <dt className="text-gray-400">RDOs lançados</dt>
         <dd className="text-right text-gray-700">{totalRdos}</dd>
+
+        {temPendencia && (
+          <>
+            <dt className="text-amarelo font-medium">RDOs pendentes</dt>
+            <dd className="text-right text-amarelo font-medium">
+              {rdosPendentes} dia{rdosPendentes === 1 ? "" : "s"} sem RDO
+            </dd>
+          </>
+        )}
       </dl>
+
+      {temPendencia && (
+        <div className="bg-amarelo/10 border border-amarelo/25 text-amarelo text-xs rounded-md px-3 py-2">
+          ⚠ O % de avanço acima é do último RDO sincronizado - com {rdosPendentes} dia
+          {rdosPendentes === 1 ? "" : "s"} sem lançamento (comum com internet instável a bordo), pode não
+          refletir a situação mais recente.
+        </div>
+      )}
 
       {temItens && (
         <>
