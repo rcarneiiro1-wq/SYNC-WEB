@@ -72,7 +72,10 @@ function diasDesde(dataIso: string | null): number | null {
   if (Number.isNaN(inicio.getTime())) return null;
   const hoje = new Date();
   const diffMs = hoje.setHours(0, 0, 0, 0) - inicio.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+  // +1 pra contar de forma INCLUSIVA (o próprio dia de início já conta como
+  // "dia 1 a bordo") - mesma convenção usada no desktop pro "Dias" do
+  // histórico de embarques (lá é (mais_recente - mais_antiga).days + 1)
+  return Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1);
 }
 
 /** A data "oficial" de início é quando alguém clicou em Iniciar Embarque -
