@@ -60,12 +60,12 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
   }
 }
 
-function diasDesde(dataBr: string | null): number | null {
-  if (!dataBr) return null;
-  const partes = dataBr.split("/");
-  if (partes.length !== 3) return null;
-  const [dia, mes, ano] = partes.map(Number);
-  const inicio = new Date(ano, mes - 1, dia);
+function diasDesde(dataIso: string | null): number | null {
+  if (!dataIso) return null;
+  // desktop grava em formato ISO (AAAA-MM-DD), não brasileiro -
+  // confirmado direto no código do desktop (criar_embarque usa
+  // datetime.now().strftime("%Y-%m-%d"))
+  const inicio = new Date(dataIso + "T00:00:00");
   if (Number.isNaN(inicio.getTime())) return null;
   const hoje = new Date();
   const diffMs = hoje.setHours(0, 0, 0, 0) - inicio.setHours(0, 0, 0, 0);
