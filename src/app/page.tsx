@@ -11,7 +11,9 @@ function corPercentual(percentual: number | null): string {
 }
 
 function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
-  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal } = linha;
+  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco } = linha;
+  const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
@@ -45,6 +47,36 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
         <dt className="text-gray-400">RDOs lançados</dt>
         <dd className="text-right text-gray-700">{totalRdos}</dd>
       </dl>
+
+      {temItens && (
+        <>
+          <div className="h-px bg-gray-100" />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 text-xs">
+              <span className="flex items-center gap-1 bg-verde/10 text-verde font-semibold px-2 py-1 rounded-full">
+                ✓ {itensAvanco.concluido.length} concluído{itensAvanco.concluido.length === 1 ? "" : "s"}
+              </span>
+              <span className="flex items-center gap-1 bg-amarelo/10 text-amarelo font-semibold px-2 py-1 rounded-full">
+                ● {itensAvanco.em_andamento.length} em andamento
+              </span>
+              <span className="flex items-center gap-1 bg-gray-100 text-gray-500 font-semibold px-2 py-1 rounded-full">
+                ○ {itensAvanco.a_iniciar.length} a iniciar
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+              {itensAvanco.concluido.map((item) => (
+                <span key={item} className="text-verde">✓ {item}</span>
+              ))}
+              {itensAvanco.em_andamento.map((item) => (
+                <span key={item} className="text-amarelo">● {item}</span>
+              ))}
+              {itensAvanco.a_iniciar.map((item) => (
+                <span key={item} className="text-gray-400">○ {item}</span>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

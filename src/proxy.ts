@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { NOME_COOKIE, valorEsperadoDoCookie } from "@/lib/auth";
+import { NOME_COOKIE, protecaoAtiva, valorEsperadoDoCookie } from "@/lib/auth";
 
 export async function proxy(request: NextRequest) {
+  if (!protecaoAtiva()) {
+    return NextResponse.next(); // sem SITE_PASSWORD configurada = site aberto, sem pedir nada
+  }
+
   const { pathname } = request.nextUrl;
 
   // a própria página de login (e os recursos estáticos) não passam pela trava

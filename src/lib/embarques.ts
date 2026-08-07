@@ -32,6 +32,12 @@ export type Rdo = {
   avanco_json: string | null;
 };
 
+export type ItensPorStatus = {
+  concluido: string[];
+  em_andamento: string[];
+  a_iniciar: string[];
+};
+
 export type LinhaEmbarque = {
   embarque: Embarque;
   obra: Obra | null;
@@ -39,6 +45,7 @@ export type LinhaEmbarque = {
   percentual: number | null;
   diasEmbarcado: number | null;
   dataInicioReal: string | null;
+  itensAvanco: ItensPorStatus;
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -58,6 +65,26 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
     return Math.round((concluidos / valores.length) * 100);
   } catch {
     return null;
+  }
+}
+
+/** Separa os itens do escopo (FLARE, PROA, HELIDEK...) por status, com
+ * base no RDO mais recente - pra dar a mesma clareza que o hub do
+ * desktop já mostra: o que já foi feito, o que está rolando agora, e o
+ * que ainda nem começou. */
+function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
+  const vazio: ItensPorStatus = { concluido: [], em_andamento: [], a_iniciar: [] };
+  if (!rdo?.avanco_json) return vazio;
+  try {
+    const avanco = JSON.parse(rdo.avanco_json) as Record<string, string>;
+    for (const [item, status] of Object.entries(avanco)) {
+      if (status === "concluido") vazio.concluido.push(item);
+      else if (status === "em_andamento") vazio.em_andamento.push(item);
+      else vazio.a_iniciar.push(item);
+    }
+    return vazio;
+  } catch {
+    return vazio;
   }
 }
 
@@ -140,6 +167,7 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
       percentual: percentualDoRdo(listaRdos[0]),
       diasEmbarcado: diasDesde(inicioReal),
       dataInicioReal: inicioReal,
+      itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
     };
   });
 }
