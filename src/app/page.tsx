@@ -1,4 +1,4 @@
-import { buscarEmbarquesAtivos, type LinhaEmbarque } from "@/lib/embarques";
+import { buscarEmbarquesAtivos, formatarDataBr, type LinhaEmbarque } from "@/lib/embarques";
 import { sair } from "./actions";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
@@ -11,7 +11,7 @@ function corPercentual(percentual: number | null): string {
 }
 
 function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
-  const { embarque, obra, totalRdos, percentual, diasEmbarcado } = linha;
+  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal } = linha;
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
@@ -34,13 +34,13 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
         <dd className="text-right text-gray-700">{obra?.empresa || "-"}</dd>
 
         <dt className="text-gray-400">Embarcado desde</dt>
-        <dd className="text-right text-gray-700">{embarque.data_inicio || "-"}</dd>
+        <dd className="text-right text-gray-700">{formatarDataBr(dataInicioReal)}</dd>
 
         <dt className="text-gray-400">Dias a bordo</dt>
         <dd className="text-right text-gray-700">{diasEmbarcado !== null ? `${diasEmbarcado} dia(s)` : "-"}</dd>
 
         <dt className="text-gray-400">Previsão de desembarque</dt>
-        <dd className="text-right text-gray-700">{obra?.data_desembarque_prevista || "-"}</dd>
+        <dd className="text-right text-gray-700">{formatarDataBr(obra?.data_desembarque_prevista ?? null)}</dd>
 
         <dt className="text-gray-400">RDOs lançados</dt>
         <dd className="text-right text-gray-700">{totalRdos}</dd>

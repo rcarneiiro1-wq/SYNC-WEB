@@ -38,6 +38,7 @@ export type LinhaEmbarque = {
   totalRdos: number;
   percentual: number | null;
   diasEmbarcado: number | null;
+  dataInicioReal: string | null;
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -62,14 +63,39 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
 
 function diasDesde(dataIso: string | null): number | null {
   if (!dataIso) return null;
-  // desktop grava em formato ISO (AAAA-MM-DD), não brasileiro -
-  // confirmado direto no código do desktop (criar_embarque usa
-  // datetime.now().strftime("%Y-%m-%d"))
-  const inicio = new Date(dataIso + "T00:00:00");
+  // tanto "embarques.data_inicio" (AAAA-MM-DD) quanto "rdos.data"
+  // (AAAA-MM-DD HH:MM:SS, é assim que o sqlite grava datetime por padrão)
+  // vêm com os 10 primeiros caracteres em ISO - pega só essa parte,
+  // funciona pros dois formatos
+  const somenteData = dataIso.slice(0, 10);
+  const inicio = new Date(somenteData + "T00:00:00");
   if (Number.isNaN(inicio.getTime())) return null;
   const hoje = new Date();
   const diffMs = hoje.setHours(0, 0, 0, 0) - inicio.setHours(0, 0, 0, 0);
   return Math.max(0, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+/** A data "oficial" de início é quando alguém clicou em Iniciar Embarque -
+ * mas é comum a pessoa só lançar o primeiro RDO depois, às vezes com data
+ * atrasada (anterior ao clique). "Dias a bordo" fica mais correto usando
+ * a data mais antiga entre as duas, não só o clique administrativo -
+ * senão dá exatamente o problema visto na prática: embarque criado hoje,
+ * mas com RDO de ontem, mostrando "0 dias" mesmo já tendo 1 dia documentado. */
+function dataMaisAntiga(dataInicio: string | null, rdos: Rdo[]): string | null {
+  const candidatas = [dataInicio, ...rdos.map((r) => r.data)].filter(
+    (d): d is string => Boolean(d)
+  );
+  if (candidatas.length === 0) return null;
+  return candidatas.reduce((menor, atual) => (atual.slice(0, 10) < menor.slice(0, 10) ? atual : menor));
+}
+
+/** "AAAA-MM-DD" ou "AAAA-MM-DD HH:MM:SS" -> "DD/MM/AAAA", igual o resto
+ * do sistema (desktop) mostra as datas. */
+export function formatarDataBr(dataIso: string | null): string {
+  if (!dataIso) return "-";
+  const [ano, mes, dia] = dataIso.slice(0, 10).split("-");
+  if (!ano || !mes || !dia) return dataIso;
+  return `${dia}/${mes}/${ano}`;
 }
 
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
@@ -103,12 +129,14 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
 
   return embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
+    const inicioReal = dataMaisAntiga(embarque.data_inicio, listaRdos);
     return {
       embarque,
       obra: obrasPorId.get(embarque.obra_id) || null,
       totalRdos: listaRdos.length,
       percentual: percentualDoRdo(listaRdos[0]),
-      diasEmbarcado: diasDesde(embarque.data_inicio),
+      diasEmbarcado: diasDesde(inicioReal),
+      dataInicioReal: inicioReal,
     };
   });
 }
