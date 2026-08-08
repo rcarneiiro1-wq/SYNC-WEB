@@ -1,5 +1,5 @@
 import { buscarEmbarquesAtivos, formatarDataBr, type LinhaEmbarque } from "@/lib/embarques";
-import { sair } from "./actions";
+import { Cabecalho } from "@/components/Cabecalho";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
 
@@ -118,22 +118,7 @@ export default async function PaginaEmbarques() {
 
   return (
     <div className="min-h-screen">
-      <header className="bg-navy text-white">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div>
-            <p className="text-lg font-bold leading-tight">Sync ERP</p>
-            <p className="text-azul text-xs font-semibold tracking-wide">GERENCIAMENTO DE EMBARQUE</p>
-          </div>
-          <form action={sair}>
-            <button
-              type="submit"
-              className="text-xs text-gray-300 hover:text-white underline cursor-pointer"
-            >
-              Sair
-            </button>
-          </form>
-        </div>
-      </header>
+      <Cabecalho paginaAtiva="ativos" />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-baseline justify-between mb-6">
