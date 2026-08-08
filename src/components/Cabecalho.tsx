@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { sair } from "@/app/actions";
 
-export function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico" }) {
-  const linkClasse = (pagina: "ativos" | "historico") =>
+export function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico" | "relatorios" }) {
+  const linkClasse = (pagina: "ativos" | "historico" | "relatorios") =>
     `text-sm font-medium ${
       paginaAtiva === pagina ? "text-white" : "text-gray-400 hover:text-white"
     }`;
@@ -21,6 +21,9 @@ export function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico"
             </Link>
             <Link href="/historico" className={linkClasse("historico")}>
               Histórico
+            </Link>
+            <Link href="/relatorios" className={linkClasse("relatorios")}>
+              Relatório por empresa
             </Link>
           </nav>
         </div>
