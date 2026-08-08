@@ -1,0 +1,359 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { formatarDataBr, type LinhaHistorico, type ItensPorStatus } from "@/lib/embarques";
+
+function corPercentualBadge(percentual: number | null): string {
+  if (percentual === null) return "bg-gray-100 text-gray-400";
+  if (percentual >= 70) return "bg-verde/15 text-verde";
+  if (percentual >= 40) return "bg-amarelo/15 text-amarelo";
+  return "bg-vermelho/15 text-vermelho";
+}
+
+function ResumoItens({ itensAvanco }: { itensAvanco: ItensPorStatus }) {
+  const { concluido, em_andamento, a_iniciar } = itensAvanco;
+  const total = concluido.length + em_andamento.length + a_iniciar.length;
+  if (total === 0) return <span className="text-gray-300 text-xs">sem itens</span>;
+  return (
+    <div className="flex gap-1.5 text-xs">
+      {concluido.length > 0 && <span className="text-verde font-medium">✓{concluido.length}</span>}
+      {em_andamento.length > 0 && <span className="text-amarelo font-medium">●{em_andamento.length}</span>}
+      {a_iniciar.length > 0 && <span className="text-gray-400 font-medium">○{a_iniciar.length}</span>}
+    </div>
+  );
+}
+
+type ColunaOrdenavel = "nome" | "periodo" | "dias" | "pendencias" | "percentual";
+
+function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
+  if (!ativa) return <span className="text-gray-300 ml-1">↕</span>;
+  return <span className="text-azul ml-1">{asc ? "↑" : "↓"}</span>;
+}
+
+function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
+  const { itensAvanco, justificativa, rdos } = linha;
+  return (
+    <tr>
+      <td colSpan={6} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
+        <div className="grid sm:grid-cols-2 gap-6">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Itens do escopo</p>
+            {itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length === 0 ? (
+              <p className="text-xs text-gray-400">Nenhum item registrado.</p>
+            ) : (
+              <div className="flex flex-col gap-1 text-sm">
+                {itensAvanco.concluido.map((item) => (
+                  <span key={item} className="text-verde">✓ {item}</span>
+                ))}
+                {itensAvanco.em_andamento.map((item) => (
+                  <span key={item} className="text-amarelo">● {item}</span>
+                ))}
+                {itensAvanco.a_iniciar.map((item) => (
+                  <span key={item} className="text-gray-400">○ {item}</span>
+                ))}
+              </div>
+            )}
+            {justificativa && (
+              <div className="mt-3 bg-vermelho/5 border border-vermelho/20 rounded-md px-3 py-2">
+                <p className="text-xs font-semibold text-vermelho mb-1">⚠ Justificativa registrada</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                  {justificativa.replace("[JUSTIFICATIVA - 100% marcado com item(ns) pendente(s):", "Itens pendentes:")}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              RDOs lançados ({rdos.length})
+            </p>
+            {rdos.length === 0 ? (
+              <p className="text-xs text-gray-400">Nenhum RDO lançado.</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {rdos.map((rdo) => (
+                  <div key={rdo.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border border-gray-100">
+                    <span className="text-gray-600">
+                      RDO {String(rdo.numeroRdo).padStart(3, "0")} — {formatarDataBr(rdo.data)}
+                    </span>
+                    {rdo.pdfUrl ? (
+                      <a
+                        href={rdo.pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-azul font-medium hover:underline whitespace-nowrap"
+                      >
+                        📥 Baixar PDF
+                      </a>
+                    ) : (
+                      <span className="text-gray-300 text-xs whitespace-nowrap">sem PDF ainda</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function LinhaTabela({
+  linha, par, expandida, aoClicar,
+}: {
+  linha: LinhaHistorico; par: boolean; expandida: boolean; aoClicar: () => void;
+}) {
+  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, percentualDescasado, percentualPelosItens, justificativa } = linha;
+
+  return (
+    <tr
+      className={`${par ? "bg-gray-50/60" : "bg-white"} hover:bg-azul/5 transition-colors cursor-pointer ${expandida ? "bg-azul/5" : ""}`}
+      onClick={aoClicar}
+    >
+      <td className="py-3.5 px-4">
+        <div className="flex items-center gap-2">
+          <span className={`text-gray-300 text-xs transition-transform ${expandida ? "rotate-90" : ""}`}>▶</span>
+          <div>
+            <p className="text-sm font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
+            <p className="text-xs text-gray-400 leading-tight mt-0.5">{embarque.obra_nome || "-"}</p>
+          </div>
+        </div>
+      </td>
+
+      <td className="py-3.5 px-4 text-sm text-gray-600 whitespace-nowrap">
+        {formatarDataBr(inicioReal)}
+        <span className="text-gray-300 mx-1.5">→</span>
+        {formatarDataBr(fimReal)}
+      </td>
+
+      <td className="py-3.5 px-4 text-center">
+        <p className="text-sm font-medium text-gray-700">
+          {dias ?? "-"}
+          {dias !== null && <span className="text-gray-400 font-normal text-xs"> d</span>}
+        </p>
+        <p className="text-xs text-gray-400">{totalRdos} RDO{totalRdos === 1 ? "" : "s"}</p>
+      </td>
+
+      <td className="py-3.5 px-4 text-center">
+        {pendentes > 0 ? (
+          <span className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
+            ⚠ {pendentes} pendente{pendentes === 1 ? "" : "s"}
+          </span>
+        ) : (
+          <span className="text-gray-300 text-xs">em dia</span>
+        )}
+      </td>
+
+      <td className="py-3.5 px-4 text-center">
+        <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
+          {percentualFinal !== null ? `${percentualFinal}%` : "-"}
+        </span>
+        {percentualDescasado && (
+          <div
+            className="text-[10px] text-vermelho font-medium mt-1 whitespace-nowrap"
+            title={`Digitado: ${percentualFinal}% — pelos itens: ${percentualPelosItens}%`}
+          >
+            ⚠ não bate
+          </div>
+        )}
+      </td>
+
+      <td className="py-3.5 px-4">
+        <div className="flex items-center gap-2">
+          <ResumoItens itensAvanco={itensAvanco} />
+          {justificativa && <span className="text-xs" title="Tem justificativa registrada">📝</span>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function CabecalhoOrdenavel({
+  label, coluna, ordenarPor, ordemAsc, aoClicar, alinhamento = "left",
+}: {
+  label: string; coluna: ColunaOrdenavel; ordenarPor: ColunaOrdenavel | null; ordemAsc: boolean;
+  aoClicar: (c: ColunaOrdenavel) => void; alinhamento?: "left" | "center";
+}) {
+  return (
+    <th
+      className={`py-3 px-4 text-${alinhamento} text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-navy`}
+      onClick={() => aoClicar(coluna)}
+    >
+      {label}
+      <IconeOrdenacao ativa={ordenarPor === coluna} asc={ordemAsc} />
+    </th>
+  );
+}
+
+export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
+  const [busca, setBusca] = useState("");
+  const [soPendencias, setSoPendencias] = useState(false);
+  const [agruparPorPessoa, setAgruparPorPessoa] = useState(false);
+  const [ordenarPor, setOrdenarPor] = useState<ColunaOrdenavel | null>(null);
+  const [ordemAsc, setOrdemAsc] = useState(false);
+  const [expandidoId, setExpandidoId] = useState<number | null>(null);
+
+  const aoClicarColuna = (coluna: ColunaOrdenavel) => {
+    if (ordenarPor === coluna) {
+      setOrdemAsc(!ordemAsc);
+    } else {
+      setOrdenarPor(coluna);
+      setOrdemAsc(true);
+    }
+  };
+
+  const linhasFiltradas = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return linhas.filter((l) => {
+      if (soPendencias && l.pendentes === 0) return false;
+      if (!termo) return true;
+      const nome = (l.embarque.efetivo_nome || "").toLowerCase();
+      const obra = (l.embarque.obra_nome || "").toLowerCase();
+      return nome.includes(termo) || obra.includes(termo);
+    });
+  }, [linhas, busca, soPendencias]);
+
+  const linhasOrdenadas = useMemo(() => {
+    if (!ordenarPor) return linhasFiltradas;
+    const copia = [...linhasFiltradas];
+    const sinal = ordemAsc ? 1 : -1;
+    copia.sort((a, b) => {
+      switch (ordenarPor) {
+        case "nome":
+          return sinal * (a.embarque.efetivo_nome || "").localeCompare(b.embarque.efetivo_nome || "");
+        case "periodo":
+          return sinal * (a.inicioReal || "").localeCompare(b.inicioReal || "");
+        case "dias":
+          return sinal * ((a.dias ?? -1) - (b.dias ?? -1));
+        case "pendencias":
+          return sinal * (a.pendentes - b.pendentes);
+        case "percentual":
+          return sinal * ((a.percentualFinal ?? -1) - (b.percentualFinal ?? -1));
+        default:
+          return 0;
+      }
+    });
+    return copia;
+  }, [linhasFiltradas, ordenarPor, ordemAsc]);
+
+  const grupos = useMemo(() => {
+    if (!agruparPorPessoa) return null;
+    const mapa = new Map<string, LinhaHistorico[]>();
+    for (const linha of linhasOrdenadas) {
+      const nome = linha.embarque.efetivo_nome || "Sem nome";
+      const lista = mapa.get(nome) || [];
+      lista.push(linha);
+      mapa.set(nome, lista);
+    }
+    return Array.from(mapa.entries());
+  }, [linhasOrdenadas, agruparPorPessoa]);
+
+  const resumo = useMemo(() => {
+    const total = linhasFiltradas.length;
+    const comPendencia = linhasFiltradas.filter((l) => l.pendentes > 0).length;
+    const validos = linhasFiltradas.filter((l) => l.percentualFinal !== null);
+    const media = validos.length > 0
+      ? Math.round(validos.reduce((soma, l) => soma + (l.percentualFinal || 0), 0) / validos.length)
+      : null;
+    return { total, comPendencia, media };
+  }, [linhasFiltradas]);
+
+  let contadorLinha = 0;
+  const renderizarLinha = (linha: LinhaHistorico) => {
+    const par = contadorLinha % 2 === 1;
+    contadorLinha += 1;
+    const expandida = expandidoId === linha.embarque.id;
+    return (
+      <>
+        <LinhaTabela
+          key={linha.embarque.id}
+          linha={linha}
+          par={par}
+          expandida={expandida}
+          aoClicar={() => setExpandidoId(expandida ? null : linha.embarque.id)}
+        />
+        {expandida && <LinhaExpandida key={`${linha.embarque.id}-exp`} linha={linha} />}
+      </>
+    );
+  };
+
+  return (
+    <div>
+      {/* Resumo */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+          <p className="text-2xl font-bold text-navy">{resumo.total}</p>
+          <p className="text-xs text-gray-400">embarque{resumo.total === 1 ? "" : "s"}{busca || soPendencias ? " (filtrado)" : ""}</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+          <p className={`text-2xl font-bold ${resumo.comPendencia > 0 ? "text-amarelo" : "text-navy"}`}>{resumo.comPendencia}</p>
+          <p className="text-xs text-gray-400">com pendência</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+          <p className="text-2xl font-bold text-navy">{resumo.media !== null ? `${resumo.media}%` : "-"}</p>
+          <p className="text-xs text-gray-400">% médio de conclusão</p>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="🔍 Buscar por nome ou obra..."
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          className="flex-1 min-w-[200px] rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+        />
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={soPendencias} onChange={(e) => setSoPendencias(e.target.checked)} className="accent-amarelo" />
+          Só com pendência
+        </label>
+        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={agruparPorPessoa} onChange={(e) => setAgruparPorPessoa(e.target.checked)} className="accent-azul" />
+          Agrupar por pessoa
+        </label>
+      </div>
+
+      {linhasOrdenadas.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-gray-500">
+          Nenhum embarque encontrado com esse filtro.
+        </div>
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-sm">
+          <table className="w-full min-w-[760px]">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <CabecalhoOrdenavel label="Colaborador" coluna="nome" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
+                <CabecalhoOrdenavel label="Período" coluna="periodo" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
+                <CabecalhoOrdenavel label="Duração" coluna="dias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <CabecalhoOrdenavel label="Pendências" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <CabecalhoOrdenavel label="% Final" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">O que foi feito</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {grupos
+                ? grupos.map(([nome, linhasDoGrupo]) => (
+                    <>
+                      <tr key={`grupo-${nome}`} className="bg-navy/5">
+                        <td colSpan={6} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                          {nome} <span className="font-normal text-gray-400 normal-case">— {linhasDoGrupo.length} embarque{linhasDoGrupo.length === 1 ? "" : "s"}</span>
+                        </td>
+                      </tr>
+                      {linhasDoGrupo.map((linha) => renderizarLinha(linha))}
+                    </>
+                  ))
+                : linhasOrdenadas.map((linha) => renderizarLinha(linha))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <p className="text-xs text-gray-400 mt-4">
+        Clica numa linha pra ver os itens completos, a justificativa (se tiver) e baixar os PDFs dos RDOs. "Período"
+        e "Duração" são calculados pelo intervalo real coberto pelos RDOs lançados.
+      </p>
+    </div>
+  );
+}

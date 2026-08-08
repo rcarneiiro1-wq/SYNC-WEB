@@ -30,6 +30,8 @@ export type Rdo = {
   status: string | null;
   avanco_percentual: number | null;
   avanco_json: string | null;
+  descricao: string | null;
+  arquivo_pdf_url: string | null;
 };
 
 export type ItensPorStatus = {
@@ -47,6 +49,8 @@ export type LinhaEmbarque = {
   dataInicioReal: string | null;
   itensAvanco: ItensPorStatus;
   rdosPendentes: number;
+  percentualDescasado: boolean;
+  percentualPelosItens: number | null;
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -57,7 +61,15 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
   if (rdo.avanco_percentual !== null && rdo.avanco_percentual !== undefined) {
     return rdo.avanco_percentual;
   }
-  if (!rdo.avanco_json) return null;
+  return percentualPelosItens(rdo);
+}
+
+/** % calculado só pelos itens marcados no checklist (FLARE/PROA/...),
+ * ignorando o campo de % geral digitado à mão - serve pra comparar com
+ * o percentualDoRdo() e detectar quando a pessoa digitou um número
+ * geral que não bate com o que ela realmente marcou item por item. */
+function percentualPelosItens(rdo: Rdo | undefined): number | null {
+  if (!rdo?.avanco_json) return null;
   try {
     const avanco = JSON.parse(rdo.avanco_json) as Record<string, string>;
     const valores = Object.values(avanco);
@@ -67,6 +79,18 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
   } catch {
     return null;
   }
+}
+
+/** true quando a pessoa digitou um % geral manualmente que não bate com
+ * o que os itens do checklist realmente mostram (ex: digitou "100%" mas
+ * deixou um item marcado como "Em andamento"). Só compara quando os dois
+ * valores existem de verdade - se só tiver o calculado, não tem o que
+ * descasar. Uma margem de 2 pontos evita alarme falso por arredondamento. */
+function temDescompassoDePercentual(rdo: Rdo | undefined): boolean {
+  if (!rdo || rdo.avanco_percentual === null || rdo.avanco_percentual === undefined) return false;
+  const pelosItens = percentualPelosItens(rdo);
+  if (pelosItens === null) return false;
+  return Math.abs(rdo.avanco_percentual - pelosItens) > 2;
 }
 
 /** Separa os itens do escopo (FLARE, PROA, HELIDEK...) por status, com
@@ -87,6 +111,17 @@ function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
   } catch {
     return vazio;
   }
+}
+
+/** A justificativa (quando a pessoa marca 100% com item pendente no
+ * desktop) fica gravada dentro da própria descrição do RDO, com uma
+ * marca especial na frente - separa ela do resto do texto pra mostrar
+ * destacada, em vez de escondida dentro de um parágrafo comum. */
+const MARCA_JUSTIFICATIVA = "[JUSTIFICATIVA - 100% marcado com item(ns) pendente(s):";
+function extrairJustificativa(descricao: string | null): string | null {
+  if (!descricao || !descricao.includes(MARCA_JUSTIFICATIVA)) return null;
+  const indice = descricao.indexOf(MARCA_JUSTIFICATIVA);
+  return descricao.slice(indice).trim();
 }
 
 function diasDesde(dataIso: string | null): number | null {
@@ -129,6 +164,13 @@ export function formatarDataBr(dataIso: string | null): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+export type RdoResumo = {
+  id: number;
+  numeroRdo: number;
+  data: string | null;
+  pdfUrl: string | null;
+};
+
 export type LinhaHistorico = {
   embarque: Embarque;
   obra: Obra | null;
@@ -139,6 +181,10 @@ export type LinhaHistorico = {
   itensAvanco: ItensPorStatus;
   inicioReal: string | null;
   fimReal: string | null;
+  percentualDescasado: boolean;
+  percentualPelosItens: number | null;
+  justificativa: string | null;
+  rdos: RdoResumo[];
 };
 
 /** "Dias" do histórico usa só o intervalo real coberto pelos RDOs (do mais
@@ -197,16 +243,23 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
   return embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
     const { dias, inicio, fim } = intervaloEntreRdos(listaRdos, embarque.data_inicio, embarque.data_fim);
+    const ultimoRdo = listaRdos[0];
     return {
       embarque,
       obra: null, // histórico não precisa da obra (empresa/previsão não fazem sentido pra um embarque já encerrado)
       totalRdos: listaRdos.length,
-      percentualFinal: percentualDoRdo(listaRdos[0]),
+      percentualFinal: percentualDoRdo(ultimoRdo),
       dias,
       pendentes: Math.max(0, (dias ?? 0) - listaRdos.length),
-      itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
+      itensAvanco: itensPorStatusDoRdo(ultimoRdo),
       inicioReal: inicio,
       fimReal: fim,
+      percentualDescasado: temDescompassoDePercentual(ultimoRdo),
+      percentualPelosItens: percentualPelosItens(ultimoRdo),
+      justificativa: extrairJustificativa(ultimoRdo?.descricao ?? null),
+      rdos: [...listaRdos]
+        .sort((a, b) => a.numero_rdo - b.numero_rdo)
+        .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
     };
   });
 }
@@ -250,15 +303,18 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
     // internet ruim) - o % de avanço mostrado, nesse caso, é só o do último
     // RDO que chegou, não necessariamente reflete o dia de hoje
     const rdosPendentes = Math.max(0, (diasEmbarcado ?? 0) - listaRdos.length);
+    const ultimoRdo = listaRdos[0];
     return {
       embarque,
       obra: obrasPorId.get(embarque.obra_id) || null,
       totalRdos: listaRdos.length,
-      percentual: percentualDoRdo(listaRdos[0]),
+      percentual: percentualDoRdo(ultimoRdo),
       diasEmbarcado,
       dataInicioReal: inicioReal,
-      itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
+      itensAvanco: itensPorStatusDoRdo(ultimoRdo),
       rdosPendentes,
+      percentualDescasado: temDescompassoDePercentual(ultimoRdo),
+      percentualPelosItens: percentualPelosItens(ultimoRdo),
     };
   });
 }
