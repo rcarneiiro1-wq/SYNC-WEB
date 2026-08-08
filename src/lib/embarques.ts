@@ -137,20 +137,35 @@ export type LinhaHistorico = {
   dias: number | null;
   pendentes: number;
   itensAvanco: ItensPorStatus;
+  inicioReal: string | null;
+  fimReal: string | null;
 };
 
 /** "Dias" do histórico usa só o intervalo real coberto pelos RDOs (do mais
  * antigo ao mais recente) - igual o desktop já faz no Histórico de
  * embarques finalizados. Diferente do "dias a bordo" dos embarques ATIVOS
  * (que usa hoje como referência), aqui o embarque já acabou, então o que
- * importa é só o que os RDOs realmente cobriram. */
-function diasEntreRdos(rdos: Rdo[]): number | null {
+ * importa é só o que os RDOs realmente cobriram.
+ *
+ * Devolve também as datas mín/máx usadas nessa conta - "Início"/"Fim"
+ * mostrados na tela PRECISAM ser essas mesmas datas (não a data
+ * administrativa de quando alguém clicou Iniciar/Encerrar), senão os
+ * números batem errado entre si (ex: "Início 05/08, Fim 07/08" mas
+ * "Dias: 1" - inconsistente, porque um vem de um lugar e o outro de outro). */
+function intervaloEntreRdos(
+  rdos: Rdo[],
+  fallbackInicio: string | null,
+  fallbackFim: string | null
+): { dias: number | null; inicio: string | null; fim: string | null } {
   const datas = rdos.map((r) => r.data).filter((d): d is string => Boolean(d)).map((d) => d.slice(0, 10));
-  if (datas.length === 0) return null;
+  if (datas.length === 0) {
+    return { dias: null, inicio: fallbackInicio, fim: fallbackFim };
+  }
   const minData = datas.reduce((a, b) => (a < b ? a : b));
   const maxData = datas.reduce((a, b) => (a > b ? a : b));
   const diffMs = new Date(maxData + "T00:00:00").getTime() - new Date(minData + "T00:00:00").getTime();
-  return Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+  const dias = Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+  return { dias, inicio: minData, fim: maxData };
 }
 
 export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
@@ -181,7 +196,7 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
 
   return embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
-    const dias = diasEntreRdos(listaRdos);
+    const { dias, inicio, fim } = intervaloEntreRdos(listaRdos, embarque.data_inicio, embarque.data_fim);
     return {
       embarque,
       obra: null, // histórico não precisa da obra (empresa/previsão não fazem sentido pra um embarque já encerrado)
@@ -190,6 +205,8 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
       dias,
       pendentes: Math.max(0, (dias ?? 0) - listaRdos.length),
       itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
+      inicioReal: inicio,
+      fimReal: fim,
     };
   });
 }

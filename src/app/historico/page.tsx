@@ -3,40 +3,79 @@ import { Cabecalho } from "@/components/Cabecalho";
 
 export const dynamic = "force-dynamic";
 
-function corPercentual(percentual: number | null): string {
-  if (percentual === null) return "text-gray-400";
-  if (percentual >= 70) return "text-verde";
-  if (percentual >= 40) return "text-amarelo";
-  return "text-vermelho";
+function corPercentualBadge(percentual: number | null): string {
+  if (percentual === null) return "bg-gray-100 text-gray-400";
+  if (percentual >= 70) return "bg-verde/15 text-verde";
+  if (percentual >= 40) return "bg-amarelo/15 text-amarelo";
+  return "bg-vermelho/15 text-vermelho";
 }
 
-function LinhaTabela({ linha }: { linha: LinhaHistorico }) {
-  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco } = linha;
-  const resumoItens = [
-    itensAvanco.concluido.length ? `${itensAvanco.concluido.length} concluído(s)` : null,
-    itensAvanco.em_andamento.length ? `${itensAvanco.em_andamento.length} em andamento` : null,
-    itensAvanco.a_iniciar.length ? `${itensAvanco.a_iniciar.length} a iniciar` : null,
-  ].filter(Boolean).join(" · ");
+/** Mesmas bolinhas de status usadas nos cards de "Embarques ativos" -
+ * mantém a mesma linguagem visual entre as duas páginas, e ocupa bem
+ * menos espaço horizontal que escrever "2 concluídos · 1 em andamento". */
+function ResumoItens({ itensAvanco }: { itensAvanco: LinhaHistorico["itensAvanco"] }) {
+  const { concluido, em_andamento, a_iniciar } = itensAvanco;
+  const total = concluido.length + em_andamento.length + a_iniciar.length;
+  if (total === 0) return <span className="text-gray-300 text-xs">sem itens</span>;
+
+  const titulo = [
+    concluido.length ? `Concluído: ${concluido.join(", ")}` : null,
+    em_andamento.length ? `Em andamento: ${em_andamento.join(", ")}` : null,
+    a_iniciar.length ? `A iniciar: ${a_iniciar.join(", ")}` : null,
+  ].filter(Boolean).join(" — ");
 
   return (
-    <tr className="border-b border-gray-100 last:border-0">
-      <td className="py-3 px-4 text-sm font-medium text-navy">{embarque.efetivo_nome || "-"}</td>
-      <td className="py-3 px-4 text-sm text-gray-600">{embarque.obra_nome || "-"}</td>
-      <td className="py-3 px-4 text-sm text-gray-600">{formatarDataBr(embarque.data_inicio)}</td>
-      <td className="py-3 px-4 text-sm text-gray-600">{formatarDataBr(embarque.data_fim)}</td>
-      <td className="py-3 px-4 text-sm text-gray-600 text-center">{dias ?? "-"}</td>
-      <td className="py-3 px-4 text-sm text-gray-600 text-center">{totalRdos}</td>
-      <td className="py-3 px-4 text-sm text-center">
+    <div className="flex gap-1.5 text-xs" title={titulo}>
+      {concluido.length > 0 && <span className="text-verde font-medium">✓{concluido.length}</span>}
+      {em_andamento.length > 0 && <span className="text-amarelo font-medium">●{em_andamento.length}</span>}
+      {a_iniciar.length > 0 && <span className="text-gray-400 font-medium">○{a_iniciar.length}</span>}
+    </div>
+  );
+}
+
+function LinhaTabela({ linha, par }: { linha: LinhaHistorico; par: boolean }) {
+  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal } = linha;
+
+  return (
+    <tr className={`${par ? "bg-gray-50/60" : "bg-white"} hover:bg-azul/5 transition-colors`}>
+      <td className="py-3.5 px-4">
+        <p className="text-sm font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
+        <p className="text-xs text-gray-400 leading-tight mt-0.5">{embarque.obra_nome || "-"}</p>
+      </td>
+
+      <td className="py-3.5 px-4 text-sm text-gray-600 whitespace-nowrap">
+        {formatarDataBr(inicioReal)}
+        <span className="text-gray-300 mx-1.5">→</span>
+        {formatarDataBr(fimReal)}
+      </td>
+
+      <td className="py-3.5 px-4 text-center">
+        <p className="text-sm font-medium text-gray-700">
+          {dias ?? "-"}
+          {dias !== null && <span className="text-gray-400 font-normal text-xs"> d</span>}
+        </p>
+        <p className="text-xs text-gray-400">{totalRdos} RDO{totalRdos === 1 ? "" : "s"}</p>
+      </td>
+
+      <td className="py-3.5 px-4 text-center">
         {pendentes > 0 ? (
-          <span className="text-amarelo font-medium">⚠ {pendentes}</span>
+          <span className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
+            ⚠ {pendentes} pendente{pendentes === 1 ? "" : "s"}
+          </span>
         ) : (
-          <span className="text-gray-300">-</span>
+          <span className="text-gray-300 text-xs">em dia</span>
         )}
       </td>
-      <td className={`py-3 px-4 text-sm text-right font-semibold ${corPercentual(percentualFinal)}`}>
-        {percentualFinal !== null ? `${percentualFinal}%` : "-"}
+
+      <td className="py-3.5 px-4 text-center">
+        <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
+          {percentualFinal !== null ? `${percentualFinal}%` : "-"}
+        </span>
       </td>
-      <td className="py-3 px-4 text-xs text-gray-400">{resumoItens || "-"}</td>
+
+      <td className="py-3.5 px-4">
+        <ResumoItens itensAvanco={itensAvanco} />
+      </td>
     </tr>
   );
 }
@@ -55,7 +94,7 @@ export default async function PaginaHistorico() {
     <div className="min-h-screen">
       <Cabecalho paginaAtiva="historico" />
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="max-w-5xl mx-auto px-6 py-8">
         <div className="flex items-baseline justify-between mb-6">
           <h1 className="text-xl font-bold text-navy">Histórico de embarques finalizados</h1>
           <p className="text-sm text-gray-500">
@@ -76,24 +115,21 @@ export default async function PaginaHistorico() {
         )}
 
         {linhas.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-sm">
+            <table className="w-full min-w-[760px]">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Colaborador</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Obra</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Início</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fim</th>
-                  <th className="py-2.5 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Dias</th>
-                  <th className="py-2.5 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">RDOs</th>
-                  <th className="py-2.5 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Pendências</th>
-                  <th className="py-2.5 px-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">% Final</th>
-                  <th className="py-2.5 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">O que foi feito</th>
+                <tr className="border-b border-gray-200">
+                  <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Colaborador</th>
+                  <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Período</th>
+                  <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Duração</th>
+                  <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Pendências</th>
+                  <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">% Final</th>
+                  <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">O que foi feito</th>
                 </tr>
               </thead>
-              <tbody>
-                {linhas.map((linha) => (
-                  <LinhaTabela key={linha.embarque.id} linha={linha} />
+              <tbody className="divide-y divide-gray-100">
+                {linhas.map((linha, i) => (
+                  <LinhaTabela key={linha.embarque.id} linha={linha} par={i % 2 === 1} />
                 ))}
               </tbody>
             </table>
@@ -101,8 +137,9 @@ export default async function PaginaHistorico() {
         )}
 
         <p className="text-xs text-gray-400 mt-4">
-          "Dias" e "Pendências" são calculados pelo intervalo real coberto pelos RDOs lançados - não pela data
-          administrativa de início/fim do embarque.
+          "Período" e "Duração" são calculados pelo intervalo real coberto pelos RDOs lançados - não pela data
+          administrativa de início/fim do embarque. Passa o mouse em cima das bolinhas de "O que foi feito" pra ver os
+          itens de cada uma.
         </p>
       </main>
 
