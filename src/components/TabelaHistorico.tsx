@@ -55,10 +55,8 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
             )}
             {justificativa && (
               <div className="mt-3 bg-vermelho/5 border border-vermelho/20 rounded-md px-3 py-2">
-                <p className="text-xs font-semibold text-vermelho mb-1">⚠ Justificativa registrada</p>
-                <p className="text-xs text-gray-600 whitespace-pre-wrap">
-                  {justificativa.replace("[JUSTIFICATIVA - 100% marcado com item(ns) pendente(s):", "Itens pendentes:")}
-                </p>
+                <p className="text-xs font-semibold text-vermelho mb-1">⚠ Justificativa (100% com item pendente)</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{justificativa}</p>
               </div>
             )}
           </div>

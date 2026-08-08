@@ -32,6 +32,7 @@ export type Rdo = {
   avanco_json: string | null;
   descricao: string | null;
   arquivo_pdf_url: string | null;
+  justificativa_percentual: string | null;
 };
 
 export type ItensPorStatus = {
@@ -111,17 +112,6 @@ function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
   } catch {
     return vazio;
   }
-}
-
-/** A justificativa (quando a pessoa marca 100% com item pendente no
- * desktop) fica gravada dentro da própria descrição do RDO, com uma
- * marca especial na frente - separa ela do resto do texto pra mostrar
- * destacada, em vez de escondida dentro de um parágrafo comum. */
-const MARCA_JUSTIFICATIVA = "[JUSTIFICATIVA - 100% marcado com item(ns) pendente(s):";
-function extrairJustificativa(descricao: string | null): string | null {
-  if (!descricao || !descricao.includes(MARCA_JUSTIFICATIVA)) return null;
-  const indice = descricao.indexOf(MARCA_JUSTIFICATIVA);
-  return descricao.slice(indice).trim();
 }
 
 function diasDesde(dataIso: string | null): number | null {
@@ -256,7 +246,7 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
       fimReal: fim,
       percentualDescasado: temDescompassoDePercentual(ultimoRdo),
       percentualPelosItens: percentualPelosItens(ultimoRdo),
-      justificativa: extrairJustificativa(ultimoRdo?.descricao ?? null),
+      justificativa: ultimoRdo?.justificativa_percentual ?? null,
       rdos: [...listaRdos]
         .sort((a, b) => a.numero_rdo - b.numero_rdo)
         .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
