@@ -129,6 +129,71 @@ export function formatarDataBr(dataIso: string | null): string {
   return `${dia}/${mes}/${ano}`;
 }
 
+export type LinhaHistorico = {
+  embarque: Embarque;
+  obra: Obra | null;
+  totalRdos: number;
+  percentualFinal: number | null;
+  dias: number | null;
+  pendentes: number;
+  itensAvanco: ItensPorStatus;
+};
+
+/** "Dias" do histórico usa só o intervalo real coberto pelos RDOs (do mais
+ * antigo ao mais recente) - igual o desktop já faz no Histórico de
+ * embarques finalizados. Diferente do "dias a bordo" dos embarques ATIVOS
+ * (que usa hoje como referência), aqui o embarque já acabou, então o que
+ * importa é só o que os RDOs realmente cobriram. */
+function diasEntreRdos(rdos: Rdo[]): number | null {
+  const datas = rdos.map((r) => r.data).filter((d): d is string => Boolean(d)).map((d) => d.slice(0, 10));
+  if (datas.length === 0) return null;
+  const minData = datas.reduce((a, b) => (a < b ? a : b));
+  const maxData = datas.reduce((a, b) => (a > b ? a : b));
+  const diffMs = new Date(maxData + "T00:00:00").getTime() - new Date(minData + "T00:00:00").getTime();
+  return Math.round(diffMs / (1000 * 60 * 60 * 24)) + 1;
+}
+
+export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
+  const { data: embarques, error: erroEmb } = await supabase
+    .from("embarques")
+    .select("*")
+    .eq("ativo", false)
+    .order("data_inicio", { ascending: false });
+
+  if (erroEmb) throw new Error(`Não consegui buscar o histórico: ${erroEmb.message}`);
+  if (!embarques || embarques.length === 0) return [];
+
+  const idsEmbarques = embarques.map((e) => e.id);
+  const { data: rdos, error: erroRdos } = await supabase
+    .from("rdos")
+    .select("*")
+    .in("embarque_id", idsEmbarques)
+    .order("numero_rdo", { ascending: false });
+
+  if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+
+  const rdosPorEmbarque = new Map<number, Rdo[]>();
+  for (const rdo of rdos || []) {
+    const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
+    lista.push(rdo);
+    rdosPorEmbarque.set(rdo.embarque_id, lista);
+  }
+
+  return embarques.map((embarque) => {
+    const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
+    const dias = diasEntreRdos(listaRdos);
+    return {
+      embarque,
+      obra: null, // histórico não precisa da obra (empresa/previsão não fazem sentido pra um embarque já encerrado)
+      totalRdos: listaRdos.length,
+      percentualFinal: percentualDoRdo(listaRdos[0]),
+      dias,
+      pendentes: Math.max(0, (dias ?? 0) - listaRdos.length),
+      itensAvanco: itensPorStatusDoRdo(listaRdos[0]),
+    };
+  });
+}
+
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   const { data: embarques, error: erroEmb } = await supabase
     .from("embarques")

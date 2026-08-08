@@ -1,59 +1,155 @@
-import { entrar } from "./actions";
+import { buscarEmbarquesAtivos, formatarDataBr, type LinhaEmbarque } from "@/lib/embarques";
+import { Cabecalho } from "@/components/Cabecalho";
 
-export default async function PaginaLogin({
-  searchParams,
-}: {
-  searchParams: Promise<{ erro?: string; proximo?: string }>;
-}) {
-  const params = await searchParams;
-  const temErro = params.erro === "1";
-  const proximo = params.proximo || "/";
+export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
+
+function corPercentual(percentual: number | null): string {
+  if (percentual === null) return "bg-gray-200 text-gray-500";
+  if (percentual >= 70) return "bg-verde/15 text-verde";
+  if (percentual >= 40) return "bg-amarelo/15 text-amarelo";
+  return "bg-vermelho/15 text-vermelho";
+}
+
+function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
+  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes } = linha;
+  const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
+  const temPendencia = rdosPendentes > 0;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-navy px-4">
-      <div className="w-full max-w-sm bg-white rounded-lg shadow-xl overflow-hidden">
-        <div className="bg-navy px-8 pt-10 pb-8 flex flex-col items-center">
-          <div className="w-14 h-14 rounded-full border-2 border-azul flex items-center justify-center text-azul text-2xl font-bold">
-            S
+    <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
+          <p className="text-sm text-gray-500">{embarque.efetivo_funcao || "Função não informada"}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full ${corPercentual(percentual)}`}>
+            {percentual !== null ? `${percentual}%` : "sem dados"}
+          </span>
+          {temPendencia && (
+            <span className="text-[10px] text-amarelo font-medium whitespace-nowrap">
+              defasado {rdosPendentes}d
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="h-px bg-gray-100" />
+
+      <dl className="grid grid-cols-2 gap-y-2 text-sm">
+        <dt className="text-gray-400">Obra / Plataforma</dt>
+        <dd className="text-right text-gray-700 font-medium">{embarque.obra_nome || "-"}</dd>
+
+        <dt className="text-gray-400">Empresa</dt>
+        <dd className="text-right text-gray-700">{obra?.empresa || "-"}</dd>
+
+        <dt className="text-gray-400">Embarcado desde</dt>
+        <dd className="text-right text-gray-700">{formatarDataBr(dataInicioReal)}</dd>
+
+        <dt className="text-gray-400">Dias a bordo</dt>
+        <dd className="text-right text-gray-700">{diasEmbarcado !== null ? `${diasEmbarcado} dia(s)` : "-"}</dd>
+
+        <dt className="text-gray-400">Previsão de desembarque</dt>
+        <dd className="text-right text-gray-700">{formatarDataBr(obra?.data_desembarque_prevista ?? null)}</dd>
+
+        <dt className="text-gray-400">RDOs lançados</dt>
+        <dd className="text-right text-gray-700">{totalRdos}</dd>
+
+        {temPendencia && (
+          <>
+            <dt className="text-amarelo font-medium">RDOs pendentes</dt>
+            <dd className="text-right text-amarelo font-medium">
+              {rdosPendentes} dia{rdosPendentes === 1 ? "" : "s"} sem RDO
+            </dd>
+          </>
+        )}
+      </dl>
+
+      {temPendencia && (
+        <div className="bg-amarelo/10 border border-amarelo/25 text-amarelo text-xs rounded-md px-3 py-2">
+          ⚠ O % de avanço acima é do último RDO sincronizado - com {rdosPendentes} dia
+          {rdosPendentes === 1 ? "" : "s"} sem lançamento (comum com internet instável a bordo), pode não
+          refletir a situação mais recente.
+        </div>
+      )}
+
+      {temItens && (
+        <>
+          <div className="h-px bg-gray-100" />
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 text-xs">
+              <span className="flex items-center gap-1 bg-verde/10 text-verde font-semibold px-2 py-1 rounded-full">
+                ✓ {itensAvanco.concluido.length} concluído{itensAvanco.concluido.length === 1 ? "" : "s"}
+              </span>
+              <span className="flex items-center gap-1 bg-amarelo/10 text-amarelo font-semibold px-2 py-1 rounded-full">
+                ● {itensAvanco.em_andamento.length} em andamento
+              </span>
+              <span className="flex items-center gap-1 bg-gray-100 text-gray-500 font-semibold px-2 py-1 rounded-full">
+                ○ {itensAvanco.a_iniciar.length} a iniciar
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-gray-500">
+              {itensAvanco.concluido.map((item) => (
+                <span key={item} className="text-verde">✓ {item}</span>
+              ))}
+              {itensAvanco.em_andamento.map((item) => (
+                <span key={item} className="text-amarelo">● {item}</span>
+              ))}
+              {itensAvanco.a_iniciar.map((item) => (
+                <span key={item} className="text-gray-400">○ {item}</span>
+              ))}
+            </div>
           </div>
-          <h1 className="mt-4 text-white text-xl font-bold">Sync ERP</h1>
-          <p className="text-azul text-xs font-semibold tracking-wide mt-0.5">
-            GERENCIAMENTO DE EMBARQUE
+        </>
+      )}
+    </div>
+  );
+}
+
+export default async function PaginaEmbarques() {
+  let linhas: LinhaEmbarque[] = [];
+  let erro: string | null = null;
+
+  try {
+    linhas = await buscarEmbarquesAtivos();
+  } catch (e) {
+    erro = e instanceof Error ? e.message : "Erro desconhecido.";
+  }
+
+  return (
+    <div className="min-h-screen">
+      <Cabecalho paginaAtiva="ativos" />
+
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        <div className="flex items-baseline justify-between mb-6">
+          <h1 className="text-xl font-bold text-navy">Embarques ativos agora</h1>
+          <p className="text-sm text-gray-500">
+            {linhas.length} pessoa{linhas.length === 1 ? "" : "s"} embarcada{linhas.length === 1 ? "" : "s"}
           </p>
         </div>
 
-        <form action={entrar} className="px-8 py-8 flex flex-col gap-4">
-          <input type="hidden" name="proximo" value={proximo} />
-          <div>
-            <label htmlFor="senha" className="block text-sm text-gray-600 mb-1">
-              Senha de acesso
-            </label>
-            <input
-              id="senha"
-              name="senha"
-              type="password"
-              autoFocus
-              required
-              className="w-full rounded-md border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
-            />
+        {erro && (
+          <div className="bg-vermelho/10 border border-vermelho/30 text-vermelho rounded-md px-4 py-3 text-sm mb-6">
+            Não consegui buscar os dados agora. Detalhe: {erro}
           </div>
+        )}
 
-          {temErro && (
-            <p className="text-sm text-vermelho -mt-1">Senha incorreta. Tenta de novo.</p>
-          )}
+        {!erro && linhas.length === 0 && (
+          <div className="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-gray-500">
+            Nenhum embarque ativo no momento.
+          </div>
+        )}
 
-          <button
-            type="submit"
-            className="mt-2 w-full rounded-md bg-navy py-2.5 text-sm font-semibold text-white hover:bg-navy-light transition-colors cursor-pointer"
-          >
-            Entrar
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {linhas.map((linha) => (
+            <CartaoEmbarque key={linha.embarque.id} linha={linha} />
+          ))}
+        </div>
+      </main>
 
-          <p className="text-center text-xs text-gray-400 mt-4">
-            Developed by Rafael Carneiro
-          </p>
-        </form>
-      </div>
+      <footer className="text-center text-xs text-gray-400 py-8">
+        Developed by Rafael Carneiro · Sync ERP
+      </footer>
     </div>
   );
 }
