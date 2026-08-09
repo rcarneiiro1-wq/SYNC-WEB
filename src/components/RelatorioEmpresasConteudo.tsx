@@ -25,26 +25,90 @@ function formatarDataBr(iso: string): string {
 }
 
 function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; maiorDiarias: number }) {
+  const [aberto, setAberto] = useState(false);
   const proporcao = maiorDiarias > 0 ? Math.round((linha.totalDiarias / maiorDiarias) * 100) : 0;
   return (
-    <tr className="border-b border-gray-100 last:border-0">
-      <td className="py-3.5 px-4">
-        <p className="text-sm font-semibold text-navy capitalize">{linha.empresa}</p>
-      </td>
-      <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.numeroEmbarques}</td>
-      <td className="py-3.5 px-4">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700 w-10 text-right">{linha.totalDiarias}</span>
-          <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-            <div className="bg-azul h-full rounded-full" style={{ width: `${proporcao}%` }} />
+    <>
+      <tr className="border-b border-gray-100 last:border-0">
+        <td className="py-3.5 px-4">
+          <p className="text-sm font-semibold text-navy capitalize">{linha.empresa}</p>
+        </td>
+        <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.numeroEmbarques}</td>
+        <td className="py-3.5 px-4">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700 w-10 text-right">{linha.totalDiarias}</span>
+            <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+              <div className="bg-azul h-full rounded-full" style={{ width: `${proporcao}%` }} />
+            </div>
           </div>
-        </div>
-      </td>
-      <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.colaboradoresDistintos}</td>
-      <td className="py-3.5 px-4 text-center text-sm text-gray-600">
-        {linha.percentualMedio !== null ? `${linha.percentualMedio}%` : "-"}
-      </td>
-    </tr>
+        </td>
+        <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.colaboradoresDistintos}</td>
+        <td className="py-3.5 px-4 text-center text-sm text-gray-600">
+          {linha.percentualMedio !== null ? `${linha.percentualMedio}%` : "-"}</td>
+        <td className="py-3.5 px-4 text-center">
+          <button
+            type="button"
+            onClick={() => setAberto((a) => !a)}
+            className="text-xs font-medium text-azul hover:underline cursor-pointer whitespace-nowrap"
+          >
+            {aberto ? "Fechar ▲" : "Abrir detalhes ▼"}
+          </button>
+        </td>
+      </tr>
+      {aberto && (
+        <tr className="bg-gray-50/70">
+          <td colSpan={6} className="px-4 pb-4 pt-1">
+            {linha.embarques.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">Nenhum embarque no detalhe.</p>
+            ) : (
+              <div className="rounded-md border border-gray-200 overflow-hidden bg-white">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="py-2 px-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Colaborador</th>
+                      <th className="py-2 px-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Plataforma</th>
+                      <th className="py-2 px-3 text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Período</th>
+                      <th className="py-2 px-3 text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Diárias</th>
+                      <th className="py-2 px-3 text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wide">%</th>
+                      <th className="py-2 px-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">O que falta / observação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linha.embarques.map((e) => (
+                      <tr key={e.embarqueId} className="border-b border-gray-100 last:border-0">
+                        <td className="py-2.5 px-3 text-xs font-medium text-navy">
+                          {e.colaborador}
+                          {e.aindaAtivo && (
+                            <span className="ml-1.5 text-[9px] font-semibold text-verde bg-verde/10 px-1.5 py-0.5 rounded-full align-middle">
+                              embarcado agora
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs text-gray-600">{e.obra}</td>
+                        <td className="py-2.5 px-3 text-xs text-gray-500 text-center whitespace-nowrap">{e.periodoNoRecorte}</td>
+                        <td className="py-2.5 px-3 text-xs text-gray-600 text-center">{e.diariasNoRecorte}</td>
+                        <td className="py-2.5 px-3 text-xs text-center">
+                          {e.percentualUltimoRdo !== null ? `${e.percentualUltimoRdo}%` : "-"}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs text-gray-600">
+                          {e.justificativa ? (
+                            <span className="text-vermelho">⚠ {e.justificativa}</span>
+                          ) : e.itensPendentes.length > 0 ? (
+                            <span>Pendente: {e.itensPendentes.join(", ")}</span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -166,6 +230,7 @@ export function RelatorioEmpresasConteudo() {
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias</th>
                 <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Colaboradores</th>
                 <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">% médio</th>
+                <th className="py-3 px-4"></th>
               </tr>
             </thead>
             <tbody>

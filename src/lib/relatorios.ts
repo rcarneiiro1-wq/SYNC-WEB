@@ -76,12 +76,25 @@ function intervaloRealDoEmbarque(embarque: Embarque, rdos: Rdo[]): { inicio: str
   return { inicio, fim: formatarISO(new Date()) };
 }
 
+export type DetalheEmbarqueRelatorio = {
+  embarqueId: number;
+  colaborador: string;
+  obra: string;
+  periodoNoRecorte: string; // ex: "05/08 → 12/08" - só a parte que caiu dentro do período pedido
+  diariasNoRecorte: number;
+  percentualUltimoRdo: number | null;
+  itensPendentes: string[]; // nomes dos itens "a_iniciar" ou "em_andamento" no último RDO
+  justificativa: string | null;
+  aindaAtivo: boolean;
+};
+
 export type LinhaRelatorioEmpresa = {
   empresa: string;
   numeroEmbarques: number;
   totalDiarias: number;
   colaboradoresDistintos: number;
   percentualMedio: number | null;
+  embarques: DetalheEmbarqueRelatorio[];
 };
 
 /** Um relatório por empresa, pro período pedido:
@@ -129,8 +142,14 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     totalDiarias: number;
     colaboradores: Set<string>;
     percentuais: number[];
+    embarques: DetalheEmbarqueRelatorio[];
   };
   const porEmpresa = new Map<string, Acumulador>();
+
+  function formatarCurto(iso: string): string {
+    const [, mes, dia] = iso.split("-");
+    return `${dia}/${mes}`;
+  }
 
   for (const embarque of embarques) {
     const obra = obrasPorId.get(embarque.obra_id);
@@ -143,7 +162,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     if (diarias === 0) continue; // não se sobrepõe de verdade com o período pedido
 
     const acumulador = porEmpresa.get(empresa) || {
-      numeroEmbarques: 0, totalDiarias: 0, colaboradores: new Set<string>(), percentuais: [],
+      numeroEmbarques: 0, totalDiarias: 0, colaboradores: new Set<string>(), percentuais: [], embarques: [],
     };
     acumulador.totalDiarias += diarias;
     if (inicio >= periodo.inicio && inicio <= periodo.fim) {
@@ -153,6 +172,35 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     const ultimoRdo = [...listaRdos].sort((a, b) => b.numero_rdo - a.numero_rdo)[0];
     const percentual = ultimoRdo?.avanco_percentual;
     if (percentual !== null && percentual !== undefined) acumulador.percentuais.push(percentual);
+
+    // itens ainda não concluídos no último RDO - é o que responde "o que
+    // ficou faltando", pra quem lê o relatório não precisar adivinhar
+    let itensPendentes: string[] = [];
+    if (ultimoRdo?.avanco_json) {
+      try {
+        const avanco = JSON.parse(ultimoRdo.avanco_json) as Record<string, string>;
+        itensPendentes = Object.entries(avanco)
+          .filter(([, status]) => status !== "concluido")
+          .map(([nome]) => nome);
+      } catch {
+        itensPendentes = [];
+      }
+    }
+
+    const inicioNoRecorte = inicio > periodo.inicio ? inicio : periodo.inicio;
+    const fimNoRecorte = fim < periodo.fim ? fim : periodo.fim;
+
+    acumulador.embarques.push({
+      embarqueId: embarque.id,
+      colaborador: embarque.efetivo_nome || "-",
+      obra: embarque.obra_nome || obra?.nome || "-",
+      periodoNoRecorte: `${formatarCurto(inicioNoRecorte)} → ${formatarCurto(fimNoRecorte)}`,
+      diariasNoRecorte: diarias,
+      percentualUltimoRdo: percentual ?? null,
+      itensPendentes,
+      justificativa: ultimoRdo?.justificativa_percentual || null,
+      aindaAtivo: Boolean(embarque.ativo),
+    });
 
     porEmpresa.set(empresa, acumulador);
   }
@@ -166,6 +214,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
       percentualMedio: acc.percentuais.length > 0
         ? Math.round(acc.percentuais.reduce((s, p) => s + p, 0) / acc.percentuais.length)
         : null,
+      embarques: acc.embarques.sort((a, b) => b.diariasNoRecorte - a.diariasNoRecorte),
     }))
     .sort((a, b) => b.totalDiarias - a.totalDiarias);
 }
