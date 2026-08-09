@@ -7,6 +7,7 @@ export default async function PaginaLogin({
 }) {
   const params = await searchParams;
   const temErro = params.erro === "1";
+  const semPermissao = params.erro === "sem_permissao";
   const proximo = params.proximo || "/";
 
   return (
@@ -53,6 +54,12 @@ export default async function PaginaLogin({
 
           {temErro && (
             <p className="text-sm text-vermelho -mt-1">Usuário ou senha incorretos. Tenta de novo.</p>
+          )}
+          {semPermissao && (
+            <p className="text-sm text-vermelho -mt-1">
+              Sua senha está certa, mas sua conta ainda não tem acesso liberado a esse site. Pede pra alguém com
+              acesso de administrador liberar em "Usuários" no desktop.
+            </p>
           )}
 
           <button

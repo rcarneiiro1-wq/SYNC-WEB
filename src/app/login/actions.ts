@@ -18,7 +18,7 @@ export async function entrar(formData: FormData) {
   const admin = criarClienteAdmin();
   const { data: linha } = await admin
     .from("usuarios")
-    .select("usuario, nome, senha_hash, senha_salt, eh_admin, ativo")
+    .select("usuario, nome, senha_hash, senha_salt, eh_admin, ativo, permissoes")
     .ilike("usuario", usuario)
     .maybeSingle();
 
@@ -28,6 +28,22 @@ export async function entrar(formData: FormData) {
 
   if (!senhaCorreta || !linha) {
     redirect(`/login?erro=1&proximo=${encodeURIComponent(proximo)}`);
+  }
+
+  // senha certa, mas isso não basta - precisa ter a permissão específica
+  // de acesso web (ou ser admin, que já tem acesso a tudo). Sem essa
+  // checagem, todo mundo que já tem conta no desktop entraria no site
+  // sem ninguém ter liberado de propósito.
+  let permissoes: string[] = [];
+  try {
+    permissoes = JSON.parse(linha.permissoes || "[]");
+  } catch {
+    permissoes = [];
+  }
+  const temAcessoWeb = Boolean(linha.eh_admin) || permissoes.includes("acesso_web");
+
+  if (!temAcessoWeb) {
+    redirect(`/login?erro=sem_permissao&proximo=${encodeURIComponent(proximo)}`);
   }
 
   const cookieValor = await criarCookieSessao({
