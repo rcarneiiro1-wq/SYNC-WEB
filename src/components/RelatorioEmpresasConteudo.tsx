@@ -46,8 +46,18 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
                 ⚠ {linha.comPendencia}
               </span>
             )}
-            {linha.completos === 0 && linha.comPendencia === 0 && (
-              <span className="text-xs text-gray-300">embarque(s) ainda ativo(s)</span>
+            {linha.ativos > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-azul bg-azul/10 px-2 py-0.5 rounded-full">
+                ● {linha.ativos} ativo{linha.ativos === 1 ? "" : "s"}
+              </span>
+            )}
+            {linha.semInformacao > 0 && (
+              <span
+                className="text-xs text-gray-300"
+                title="Encerrado antes de existir esse controle de status - não dá pra saber se ficou pendência"
+              >
+                {linha.semInformacao} sem info
+              </span>
             )}
           </div>
         </td>
