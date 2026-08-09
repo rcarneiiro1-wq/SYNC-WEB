@@ -31,7 +31,8 @@ function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
 }
 
 function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
-  const { itensAvanco, justificativa, rdos } = linha;
+  const { embarque, itensAvanco, justificativa, rdos } = linha;
+  const justificativaEncerramento = embarque.justificativa_encerramento;
   return (
     <tr>
       <td colSpan={6} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
@@ -53,9 +54,14 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
                 ))}
               </div>
             )}
-            {justificativa && (
-              <div className="mt-3 bg-vermelho/5 border border-vermelho/20 rounded-md px-3 py-2">
-                <p className="text-xs font-semibold text-vermelho mb-1">⚠ Justificativa (100% com item pendente)</p>
+            {justificativaEncerramento ? (
+              <div className="mt-3 bg-amarelo/5 border border-amarelo/20 rounded-md px-3 py-2">
+                <p className="text-xs font-semibold text-amarelo mb-1">⚠ Encerrado com pendência - motivo</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{justificativaEncerramento}</p>
+              </div>
+            ) : justificativa && (
+              <div className="mt-3 bg-gray-100 border border-gray-200 rounded-md px-3 py-2">
+                <p className="text-xs font-semibold text-gray-500 mb-1">📝 Observação registrada num RDO</p>
                 <p className="text-xs text-gray-600 whitespace-pre-wrap">{justificativa}</p>
               </div>
             )}
@@ -102,7 +108,7 @@ function LinhaTabela({
 }: {
   linha: LinhaHistorico; par: boolean; expandida: boolean; aoClicar: () => void;
 }) {
-  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, percentualDescasado, percentualPelosItens, justificativa } = linha;
+  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, justificativa } = linha;
 
   return (
     <tr
@@ -134,9 +140,20 @@ function LinhaTabela({
       </td>
 
       <td className="py-3.5 px-4 text-center">
-        {pendentes > 0 ? (
+        {embarque.status_final === "com_pendencia" ? (
           <span className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
-            ⚠ {pendentes} pendente{pendentes === 1 ? "" : "s"}
+            ⚠ Encerrado com pendência
+          </span>
+        ) : embarque.status_final === "completo" ? (
+          <span className="inline-flex items-center gap-1 bg-verde/10 text-verde text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
+            ✓ Completo
+          </span>
+        ) : pendentes > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap"
+            title="Embarque antigo, sem essa informação registrada - calculado só pela diferença entre dias e RDOs"
+          >
+            ⚠ {pendentes} dia{pendentes === 1 ? "" : "s"} sem RDO
           </span>
         ) : (
           <span className="text-gray-300 text-xs">em dia</span>
@@ -147,20 +164,14 @@ function LinhaTabela({
         <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
           {percentualFinal !== null ? `${percentualFinal}%` : "-"}
         </span>
-        {percentualDescasado && (
-          <div
-            className="text-[10px] text-vermelho font-medium mt-1 whitespace-nowrap"
-            title={`Digitado: ${percentualFinal}% — pelos itens: ${percentualPelosItens}%`}
-          >
-            ⚠ não bate
-          </div>
-        )}
       </td>
 
       <td className="py-3.5 px-4">
         <div className="flex items-center gap-2">
           <ResumoItens itensAvanco={itensAvanco} />
-          {justificativa && <span className="text-xs" title="Tem justificativa registrada">📝</span>}
+          {(embarque.justificativa_encerramento || justificativa) && (
+            <span className="text-xs" title="Tem justificativa registrada">📝</span>
+          )}
         </div>
       </td>
     </tr>
@@ -185,8 +196,6 @@ function CabecalhoOrdenavel({
 }
 
 export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
-  const [busca, setBusca] = useState("");
-  const [soPendencias, setSoPendencias] = useState(false);
   const [agruparPorPessoa, setAgruparPorPessoa] = useState(false);
   const [ordenarPor, setOrdenarPor] = useState<ColunaOrdenavel | null>(null);
   const [ordemAsc, setOrdemAsc] = useState(false);
@@ -201,20 +210,9 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     }
   };
 
-  const linhasFiltradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return linhas.filter((l) => {
-      if (soPendencias && l.pendentes === 0) return false;
-      if (!termo) return true;
-      const nome = (l.embarque.efetivo_nome || "").toLowerCase();
-      const obra = (l.embarque.obra_nome || "").toLowerCase();
-      return nome.includes(termo) || obra.includes(termo);
-    });
-  }, [linhas, busca, soPendencias]);
-
   const linhasOrdenadas = useMemo(() => {
-    if (!ordenarPor) return linhasFiltradas;
-    const copia = [...linhasFiltradas];
+    if (!ordenarPor) return linhas;
+    const copia = [...linhas];
     const sinal = ordemAsc ? 1 : -1;
     copia.sort((a, b) => {
       switch (ordenarPor) {
@@ -233,7 +231,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
       }
     });
     return copia;
-  }, [linhasFiltradas, ordenarPor, ordemAsc]);
+  }, [linhas, ordenarPor, ordemAsc]);
 
   const grupos = useMemo(() => {
     if (!agruparPorPessoa) return null;
@@ -248,14 +246,14 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   }, [linhasOrdenadas, agruparPorPessoa]);
 
   const resumo = useMemo(() => {
-    const total = linhasFiltradas.length;
-    const comPendencia = linhasFiltradas.filter((l) => l.pendentes > 0).length;
-    const validos = linhasFiltradas.filter((l) => l.percentualFinal !== null);
+    const total = linhas.length;
+    const comPendencia = linhas.filter((l) => l.embarque.status_final === "com_pendencia" || l.pendentes > 0).length;
+    const validos = linhas.filter((l) => l.percentualFinal !== null);
     const media = validos.length > 0
       ? Math.round(validos.reduce((soma, l) => soma + (l.percentualFinal || 0), 0) / validos.length)
       : null;
     return { total, comPendencia, media };
-  }, [linhasFiltradas]);
+  }, [linhas]);
 
   let contadorLinha = 0;
   const renderizarLinha = (linha: LinhaHistorico) => {
@@ -278,11 +276,10 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
 
   return (
     <div>
-      {/* Resumo */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
           <p className="text-2xl font-bold text-navy">{resumo.total}</p>
-          <p className="text-xs text-gray-400">embarque{resumo.total === 1 ? "" : "s"}{busca || soPendencias ? " (filtrado)" : ""}</p>
+          <p className="text-xs text-gray-400">embarque{resumo.total === 1 ? "" : "s"} encontrado{resumo.total === 1 ? "" : "s"}</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
           <p className={`text-2xl font-bold ${resumo.comPendencia > 0 ? "text-amarelo" : "text-navy"}`}>{resumo.comPendencia}</p>
@@ -294,19 +291,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <input
-          type="text"
-          placeholder="🔍 Buscar por nome ou obra..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          className="flex-1 min-w-[200px] rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
-        />
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-          <input type="checkbox" checked={soPendencias} onChange={(e) => setSoPendencias(e.target.checked)} className="accent-amarelo" />
-          Só com pendência
-        </label>
+      <div className="flex items-center justify-end mb-4">
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
           <input type="checkbox" checked={agruparPorPessoa} onChange={(e) => setAgruparPorPessoa(e.target.checked)} className="accent-azul" />
           Agrupar por pessoa

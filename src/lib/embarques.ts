@@ -282,9 +282,14 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   // "situação" depende do pendentes calculado acima, não dá pra filtrar
   // isso direto na query do Supabase - mas nesse ponto o conjunto já foi
   // reduzido pelos outros filtros (colaborador/obra/data), então filtrar
-  // em memória aqui é barato
-  if (filtros.situacao === "concluido") return linhas.filter((l) => l.pendentes === 0);
-  if (filtros.situacao === "pendencia") return linhas.filter((l) => l.pendentes > 0);
+  // em memória aqui é barato.
+  // Considera as DUAS fontes de pendência: o status_final gravado no
+  // encerramento (a informação de verdade, quando existe) e o gap de
+  // dias-sem-RDO calculado (fallback pra embarques antigos, sem essa
+  // informação ainda).
+  const temPendencia = (l: LinhaHistorico) => l.embarque.status_final === "com_pendencia" || l.pendentes > 0;
+  if (filtros.situacao === "concluido") return linhas.filter((l) => !temPendencia(l));
+  if (filtros.situacao === "pendencia") return linhas.filter((l) => temPendencia(l));
   return linhas;
 }
 
