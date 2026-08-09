@@ -35,6 +35,23 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
         </td>
         <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.numeroEmbarques}</td>
         <td className="py-3.5 px-4">
+          <div className="flex items-center gap-2 justify-center">
+            {linha.completos > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-verde bg-verde/10 px-2 py-0.5 rounded-full">
+                ✓ {linha.completos}
+              </span>
+            )}
+            {linha.comPendencia > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amarelo bg-amarelo/10 px-2 py-0.5 rounded-full">
+                ⚠ {linha.comPendencia}
+              </span>
+            )}
+            {linha.completos === 0 && linha.comPendencia === 0 && (
+              <span className="text-xs text-gray-300">embarque(s) ainda ativo(s)</span>
+            )}
+          </div>
+        </td>
+        <td className="py-3.5 px-4">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-gray-700 w-10 text-right">{linha.totalDiarias}</span>
             <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
@@ -57,7 +74,7 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
       </tr>
       {aberto && (
         <tr className="bg-gray-50/70">
-          <td colSpan={6} className="px-4 pb-4 pt-1">
+          <td colSpan={7} className="px-4 pb-4 pt-1">
             {linha.embarques.length === 0 ? (
               <p className="text-xs text-gray-400 py-2">Nenhum embarque no detalhe.</p>
             ) : (
@@ -79,8 +96,18 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
                         <td className="py-2.5 px-3 text-xs font-medium text-navy">
                           {e.colaborador}
                           {e.aindaAtivo && (
-                            <span className="ml-1.5 text-[9px] font-semibold text-verde bg-verde/10 px-1.5 py-0.5 rounded-full align-middle">
+                            <span className="ml-1.5 text-[9px] font-semibold text-azul bg-azul/10 px-1.5 py-0.5 rounded-full align-middle">
                               embarcado agora
+                            </span>
+                          )}
+                          {!e.aindaAtivo && e.statusFinal === "com_pendencia" && (
+                            <span className="ml-1.5 text-[9px] font-semibold text-amarelo bg-amarelo/10 px-1.5 py-0.5 rounded-full align-middle">
+                              ⚠ pendência
+                            </span>
+                          )}
+                          {!e.aindaAtivo && e.statusFinal === "completo" && (
+                            <span className="ml-1.5 text-[9px] font-semibold text-verde bg-verde/10 px-1.5 py-0.5 rounded-full align-middle">
+                              ✓ completo
                             </span>
                           )}
                         </td>
@@ -91,7 +118,9 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
                           {e.percentualUltimoRdo !== null ? `${e.percentualUltimoRdo}%` : "-"}
                         </td>
                         <td className="py-2.5 px-3 text-xs text-gray-600">
-                          {e.justificativa ? (
+                          {e.justificativaEncerramento ? (
+                            <span className="text-amarelo">⚠ {e.justificativaEncerramento}</span>
+                          ) : e.justificativa ? (
                             <span className="text-vermelho">⚠ {e.justificativa}</span>
                           ) : e.itensPendentes.length > 0 ? (
                             <span>Pendente: {e.itensPendentes.join(", ")}</span>
@@ -227,6 +256,7 @@ export function RelatorioEmpresasConteudo() {
               <tr className="border-b border-gray-200 bg-gray-50">
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</th>
                 <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Embarques</th>
+                <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Situação</th>
                 <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias</th>
                 <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Colaboradores</th>
                 <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">% médio</th>

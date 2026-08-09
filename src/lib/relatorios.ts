@@ -86,6 +86,8 @@ export type DetalheEmbarqueRelatorio = {
   itensPendentes: string[]; // nomes dos itens "a_iniciar" ou "em_andamento" no último RDO
   justificativa: string | null;
   aindaAtivo: boolean;
+  statusFinal: "completo" | "com_pendencia" | null; // null = ainda ativo, ou embarque antigo sem essa info
+  justificativaEncerramento: string | null; // por que ficou "com_pendencia" ao encerrar
 };
 
 export type LinhaRelatorioEmpresa = {
@@ -94,6 +96,8 @@ export type LinhaRelatorioEmpresa = {
   totalDiarias: number;
   colaboradoresDistintos: number;
   percentualMedio: number | null;
+  completos: number; // embarques finalizados com status_final = "completo"
+  comPendencia: number; // embarques finalizados com status_final = "com_pendencia"
   embarques: DetalheEmbarqueRelatorio[];
 };
 
@@ -143,6 +147,8 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     colaboradores: Set<string>;
     percentuais: number[];
     embarques: DetalheEmbarqueRelatorio[];
+    completos: number;
+    comPendencia: number;
   };
   const porEmpresa = new Map<string, Acumulador>();
 
@@ -163,6 +169,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
 
     const acumulador = porEmpresa.get(empresa) || {
       numeroEmbarques: 0, totalDiarias: 0, colaboradores: new Set<string>(), percentuais: [], embarques: [],
+      completos: 0, comPendencia: 0,
     };
     acumulador.totalDiarias += diarias;
     if (inicio >= periodo.inicio && inicio <= periodo.fim) {
@@ -190,6 +197,10 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     const inicioNoRecorte = inicio > periodo.inicio ? inicio : periodo.inicio;
     const fimNoRecorte = fim < periodo.fim ? fim : periodo.fim;
 
+    const statusFinal = (embarque.status_final as "completo" | "com_pendencia" | null) ?? null;
+    if (statusFinal === "completo") acumulador.completos += 1;
+    if (statusFinal === "com_pendencia") acumulador.comPendencia += 1;
+
     acumulador.embarques.push({
       embarqueId: embarque.id,
       colaborador: embarque.efetivo_nome || "-",
@@ -200,6 +211,8 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
       itensPendentes,
       justificativa: ultimoRdo?.justificativa_percentual || null,
       aindaAtivo: Boolean(embarque.ativo),
+      statusFinal,
+      justificativaEncerramento: embarque.justificativa_encerramento || null,
     });
 
     porEmpresa.set(empresa, acumulador);
@@ -214,6 +227,8 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
       percentualMedio: acc.percentuais.length > 0
         ? Math.round(acc.percentuais.reduce((s, p) => s + p, 0) / acc.percentuais.length)
         : null,
+      completos: acc.completos,
+      comPendencia: acc.comPendencia,
       embarques: acc.embarques.sort((a, b) => b.diariasNoRecorte - a.diariasNoRecorte),
     }))
     .sort((a, b) => b.totalDiarias - a.totalDiarias);

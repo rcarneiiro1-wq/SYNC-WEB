@@ -9,6 +9,8 @@ export type Embarque = {
   data_inicio: string | null;
   data_fim: string | null;
   ativo: boolean;
+  status_final: string | null; // "completo" | "com_pendencia" | null (ainda ativo, ou embarque antigo sem essa info)
+  justificativa_encerramento: string | null;
 };
 
 export type Obra = {
@@ -17,6 +19,7 @@ export type Obra = {
   empresa: string | null;
   local_flotel: string | null;
   local_codigo: string | null;
+  gm_codigo: string | null;
   prefixo_rdo: string | null;
   data_desembarque_prevista: string | null;
 };
@@ -204,12 +207,35 @@ function intervaloEntreRdos(
   return { dias, inicio: minData, fim: maxData };
 }
 
-export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
-  const { data: embarques, error: erroEmb } = await supabase
-    .from("embarques")
-    .select("*")
-    .eq("ativo", false)
-    .order("data_inicio", { ascending: false });
+export type FiltrosHistorico = {
+  colaborador?: string;
+  obra?: string;
+  dataInicio?: string; // AAAA-MM-DD
+  dataFim?: string; // AAAA-MM-DD
+  situacao?: "todos" | "concluido" | "pendencia";
+};
+
+/** Só os nomes distintos, pra popular os dropdowns de busca dos filtros -
+ * uma query bem mais leve que a do histórico completo (só 2 colunas de
+ * texto, sem juntar com RDOs), então é seguro rodar assim que a tela
+ * de filtros abre, sem violar a ideia de "nada pesado antes do Buscar". */
+export async function buscarOpcoesFiltro(): Promise<{ colaboradores: string[]; obras: string[] }> {
+  const { data, error } = await supabase.from("embarques").select("efetivo_nome, obra_nome").eq("ativo", false);
+  if (error || !data) return { colaboradores: [], obras: [] };
+  const colaboradores = Array.from(new Set(data.map((e) => e.efetivo_nome).filter((v): v is string => Boolean(v)))).sort();
+  const obras = Array.from(new Set(data.map((e) => e.obra_nome).filter((v): v is string => Boolean(v)))).sort();
+  return { colaboradores, obras };
+}
+
+export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {}): Promise<LinhaHistorico[]> {
+  let query = supabase.from("embarques").select("*").eq("ativo", false);
+  if (filtros.colaborador) query = query.ilike("efetivo_nome", `%${filtros.colaborador}%`);
+  if (filtros.obra) query = query.ilike("obra_nome", `%${filtros.obra}%`);
+  if (filtros.dataInicio) query = query.gte("data_inicio", filtros.dataInicio);
+  if (filtros.dataFim) query = query.lte("data_fim", filtros.dataFim);
+  query = query.order("data_inicio", { ascending: false });
+
+  const { data: embarques, error: erroEmb } = await query;
 
   if (erroEmb) throw new Error(`Não consegui buscar o histórico: ${erroEmb.message}`);
   if (!embarques || embarques.length === 0) return [];
@@ -230,7 +256,7 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
     rdosPorEmbarque.set(rdo.embarque_id, lista);
   }
 
-  return embarques.map((embarque) => {
+  const linhas = embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
     const { dias, inicio, fim } = intervaloEntreRdos(listaRdos, embarque.data_inicio, embarque.data_fim);
     const ultimoRdo = listaRdos[0];
@@ -252,6 +278,14 @@ export async function buscarEmbarquesFinalizados(): Promise<LinhaHistorico[]> {
         .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
     };
   });
+
+  // "situação" depende do pendentes calculado acima, não dá pra filtrar
+  // isso direto na query do Supabase - mas nesse ponto o conjunto já foi
+  // reduzido pelos outros filtros (colaborador/obra/data), então filtrar
+  // em memória aqui é barato
+  if (filtros.situacao === "concluido") return linhas.filter((l) => l.pendentes === 0);
+  if (filtros.situacao === "pendencia") return linhas.filter((l) => l.pendentes > 0);
+  return linhas;
 }
 
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
