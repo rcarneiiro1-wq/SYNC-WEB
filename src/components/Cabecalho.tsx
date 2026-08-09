@@ -1,11 +1,16 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { sair } from "@/app/actions";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
-export function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico" | "relatorios" }) {
+export async function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico" | "relatorios" }) {
   const linkClasse = (pagina: "ativos" | "historico" | "relatorios") =>
     `text-sm font-medium ${
       paginaAtiva === pagina ? "text-white" : "text-gray-400 hover:text-white"
     }`;
+
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
 
   return (
     <header className="bg-navy text-white">
@@ -27,11 +32,14 @@ export function Cabecalho({ paginaAtiva }: { paginaAtiva: "ativos" | "historico"
             </Link>
           </nav>
         </div>
-        <form action={sair}>
-          <button type="submit" className="text-xs text-gray-300 hover:text-white underline cursor-pointer">
-            Sair
-          </button>
-        </form>
+        <div className="flex items-center gap-4">
+          {sessao && <span className="text-xs text-gray-300">{sessao.nome}</span>}
+          <form action={sair}>
+            <button type="submit" className="text-xs text-gray-300 hover:text-white underline cursor-pointer">
+              Sair
+            </button>
+          </form>
+        </div>
       </div>
     </header>
   );

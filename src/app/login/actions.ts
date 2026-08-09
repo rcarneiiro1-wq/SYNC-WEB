@@ -2,20 +2,41 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { NOME_COOKIE, senhaEstaCorreta, valorEsperadoDoCookie } from "@/lib/auth";
+import { criarClienteAdmin } from "@/lib/supabase-admin";
+import { verificarSenha } from "@/lib/senha";
+import { criarCookieSessao, NOME_COOKIE_USUARIO } from "@/lib/auth-usuario";
 
 export async function entrar(formData: FormData) {
+  const usuario = String(formData.get("usuario") || "").trim();
   const senha = String(formData.get("senha") || "");
   const proximo = String(formData.get("proximo") || "/");
 
-  const correta = await senhaEstaCorreta(senha);
-  if (!correta) {
+  if (!usuario || !senha) {
     redirect(`/login?erro=1&proximo=${encodeURIComponent(proximo)}`);
   }
 
-  const valor = await valorEsperadoDoCookie();
+  const admin = criarClienteAdmin();
+  const { data: linha } = await admin
+    .from("usuarios")
+    .select("usuario, nome, senha_hash, senha_salt, eh_admin, ativo")
+    .ilike("usuario", usuario)
+    .maybeSingle();
+
+  const senhaCorreta = linha?.ativo !== false && linha
+    ? verificarSenha(senha, linha.senha_hash, linha.senha_salt)
+    : false;
+
+  if (!senhaCorreta || !linha) {
+    redirect(`/login?erro=1&proximo=${encodeURIComponent(proximo)}`);
+  }
+
+  const cookieValor = await criarCookieSessao({
+    usuario: linha.usuario,
+    nome: linha.nome,
+    ehAdmin: Boolean(linha.eh_admin),
+  });
   const jar = await cookies();
-  jar.set(NOME_COOKIE, valor, {
+  jar.set(NOME_COOKIE_USUARIO, cookieValor, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

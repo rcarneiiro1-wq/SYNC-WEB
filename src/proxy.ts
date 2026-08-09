@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { NOME_COOKIE, protecaoAtiva, valorEsperadoDoCookie } from "@/lib/auth";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 export async function proxy(request: NextRequest) {
-  if (!protecaoAtiva()) {
-    return NextResponse.next(); // sem SITE_PASSWORD configurada = site aberto, sem pedir nada
-  }
-
   const { pathname } = request.nextUrl;
 
   // a própria página de login (e os recursos estáticos) não passam pela trava
@@ -13,10 +9,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const cookie = request.cookies.get(NOME_COOKIE)?.value;
-  const esperado = await valorEsperadoDoCookie();
+  const cookie = request.cookies.get(NOME_COOKIE_USUARIO)?.value;
+  const sessao = await validarCookieSessao(cookie);
 
-  if (cookie === esperado) {
+  if (sessao) {
     return NextResponse.next();
   }
 
