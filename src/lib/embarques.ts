@@ -164,6 +164,14 @@ export type RdoResumo = {
   pdfUrl: string | null;
 };
 
+export type AnexoEmbarque = {
+  id: number;
+  nomeArquivo: string;
+  url: string | null;
+  enviadoPor: string | null;
+  enviadoEm: string | null;
+};
+
 export type LinhaHistorico = {
   embarque: Embarque;
   obra: Obra | null;
@@ -178,6 +186,7 @@ export type LinhaHistorico = {
   percentualPelosItens: number | null;
   justificativa: string | null;
   rdos: RdoResumo[];
+  anexos: AnexoEmbarque[];
 };
 
 /** "Dias" do histórico usa só o intervalo real coberto pelos RDOs (do mais
@@ -249,6 +258,23 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
 
+  const { data: anexos, error: erroAnexos } = await supabase
+    .from("anexos_embarque")
+    .select("*")
+    .in("embarque_id", idsEmbarques)
+    .order("enviado_em", { ascending: false });
+  // se der erro (ex: tabela ainda não criada no Supabase), não trava o
+  // histórico inteiro por causa disso - só mostra sem os anexos
+  const anexosPorEmbarque = new Map<number, AnexoEmbarque[]>();
+  for (const anexo of erroAnexos ? [] : anexos || []) {
+    const lista = anexosPorEmbarque.get(anexo.embarque_id) || [];
+    lista.push({
+      id: anexo.id, nomeArquivo: anexo.nome_arquivo, url: anexo.url_nuvem,
+      enviadoPor: anexo.enviado_por, enviadoEm: anexo.enviado_em,
+    });
+    anexosPorEmbarque.set(anexo.embarque_id, lista);
+  }
+
   const rdosPorEmbarque = new Map<number, Rdo[]>();
   for (const rdo of rdos || []) {
     const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
@@ -276,6 +302,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
       rdos: [...listaRdos]
         .sort((a, b) => a.numero_rdo - b.numero_rdo)
         .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
+      anexos: anexosPorEmbarque.get(embarque.id) || [],
     };
   });
 
