@@ -11,7 +11,10 @@ function corPercentual(percentual: number | null): string {
 }
 
 function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
-  const { embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes } = linha;
+  const {
+    embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes,
+    percentualDescasado, percentualPelosItens,
+  } = linha;
   const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
   const temPendencia = rdosPendentes > 0;
 
@@ -31,6 +34,9 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
               defasado {rdosPendentes}d
             </span>
           )}
+          {percentualDescasado && (
+            <span className="text-[10px] text-vermelho font-medium whitespace-nowrap">% não bate</span>
+          )}
         </div>
       </div>
 
@@ -39,6 +45,13 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
       <dl className="grid grid-cols-2 gap-y-2 text-sm">
         <dt className="text-gray-400">Obra / Plataforma</dt>
         <dd className="text-right text-gray-700 font-medium">{embarque.obra_nome || "-"}</dd>
+
+        {obra?.gm_codigo && (
+          <>
+            <dt className="text-gray-400">GM</dt>
+            <dd className="text-right text-gray-700 font-medium">GM - {obra.gm_codigo}</dd>
+          </>
+        )}
 
         <dt className="text-gray-400">Empresa</dt>
         <dd className="text-right text-gray-700">{obra?.empresa || "-"}</dd>
@@ -70,6 +83,14 @@ function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           ⚠ O % de avanço acima é do último RDO sincronizado - com {rdosPendentes} dia
           {rdosPendentes === 1 ? "" : "s"} sem lançamento (comum com internet instável a bordo), pode não
           refletir a situação mais recente.
+        </div>
+      )}
+
+      {percentualDescasado && (
+        <div className="bg-vermelho/10 border border-vermelho/25 text-vermelho text-xs rounded-md px-3 py-2">
+          ⚠ O % digitado no último RDO ({percentual}%) não bate com os itens marcados no checklist
+          ({percentualPelosItens}% pelos itens). Provavelmente esqueceram de atualizar um item, ou digitaram o
+          % geral errado.
         </div>
       )}
 
