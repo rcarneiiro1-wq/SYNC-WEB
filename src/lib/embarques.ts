@@ -68,33 +68,40 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
   return percentualPelosItens(rdo);
 }
 
-/** % calculado só pelos itens marcados no checklist (FLARE/PROA/...),
- * ignorando o campo de % geral digitado à mão - serve pra comparar com
- * o percentualDoRdo() e detectar quando a pessoa digitou um número
- * geral que não bate com o que ela realmente marcou item por item. */
+/** % calculado pelos itens do checklist (FLARE/PROA/...), pra comparar
+ * com o percentualDoRdo() e pegar quando o número digitado à mão está
+ * bem fora do que os itens mostram. Concluído conta como 100%, em
+ * andamento conta como 50% (progresso parcial é normal - não é 0%
+ * só porque o item ainda não foi finalizado), a iniciar conta como 0%. */
 function percentualPelosItens(rdo: Rdo | undefined): number | null {
   if (!rdo?.avanco_json) return null;
   try {
     const avanco = JSON.parse(rdo.avanco_json) as Record<string, string>;
     const valores = Object.values(avanco);
     if (valores.length === 0) return null;
-    const concluidos = valores.filter((v) => v === "concluido").length;
-    return Math.round((concluidos / valores.length) * 100);
+    const pontos = valores.reduce((soma, v) => {
+      if (v === "concluido") return soma + 100;
+      if (v === "em_andamento") return soma + 50;
+      return soma;
+    }, 0);
+    return Math.round(pontos / valores.length);
   } catch {
     return null;
   }
 }
 
-/** true quando a pessoa digitou um % geral manualmente que não bate com
- * o que os itens do checklist realmente mostram (ex: digitou "100%" mas
- * deixou um item marcado como "Em andamento"). Só compara quando os dois
+/** true quando a pessoa digitou um % geral manualmente que está bem
+ * fora do que os itens do checklist mostram (ex: digitou "100%" mas
+ * vários itens ainda não foram nem iniciados). Só compara quando os dois
  * valores existem de verdade - se só tiver o calculado, não tem o que
- * descasar. Uma margem de 2 pontos evita alarme falso por arredondamento. */
+ * descasar. Margem de 15 pontos: progresso parcial dentro de um item
+ * "em andamento" é normal e não deve soar alarme - só pega diferença
+ * grande o suficiente pra realmente parecer um esquecimento. */
 function temDescompassoDePercentual(rdo: Rdo | undefined): boolean {
   if (!rdo || rdo.avanco_percentual === null || rdo.avanco_percentual === undefined) return false;
   const pelosItens = percentualPelosItens(rdo);
   if (pelosItens === null) return false;
-  return Math.abs(rdo.avanco_percentual - pelosItens) > 2;
+  return Math.abs(rdo.avanco_percentual - pelosItens) > 15;
 }
 
 /** Separa os itens do escopo (FLARE, PROA, HELIDEK...) por status, com
@@ -117,6 +124,19 @@ function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
   }
 }
 
+/** "Hoje" de verdade no fuso de Brasília (AAAA-MM-DD) - NÃO usar
+ * `new Date()` puro pra isso: no servidor (Vercel roda em UTC), depois
+ * das ~21h em Brasília já é "amanhã" em UTC, e qualquer conta de "dias
+ * desde X" fica adiantada em 1 dia bem nesse horário - foi exatamente
+ * esse bug que fez o card mostrar "2 dias a bordo" pra quem embarcou
+ * HOJE mesmo. */
+export function hojeIsoBrasil(): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  return formatter.format(new Date()); // en-CA formata como AAAA-MM-DD
+}
+
 function diasDesde(dataIso: string | null): number | null {
   if (!dataIso) return null;
   // tanto "embarques.data_inicio" (AAAA-MM-DD) quanto "rdos.data"
@@ -124,10 +144,10 @@ function diasDesde(dataIso: string | null): number | null {
   // vêm com os 10 primeiros caracteres em ISO - pega só essa parte,
   // funciona pros dois formatos
   const somenteData = dataIso.slice(0, 10);
-  const inicio = new Date(somenteData + "T00:00:00");
+  const inicio = new Date(somenteData + "T00:00:00Z");
   if (Number.isNaN(inicio.getTime())) return null;
-  const hoje = new Date();
-  const diffMs = hoje.setHours(0, 0, 0, 0) - inicio.setHours(0, 0, 0, 0);
+  const hoje = new Date(hojeIsoBrasil() + "T00:00:00Z");
+  const diffMs = hoje.getTime() - inicio.getTime();
   // +1 pra contar de forma INCLUSIVA (o próprio dia de início já conta como
   // "dia 1 a bordo") - mesma convenção usada no desktop pro "Dias" do
   // histórico de embarques (lá é (mais_recente - mais_antiga).days + 1)
