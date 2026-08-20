@@ -56,6 +56,14 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
       ? referenciasHoje.map((r) => `${r.tipo} - ${r.codigo}`).join("   |   ")
       : null;
 
+  // O rótulo mostra o tipo de verdade (GM, SS, WO...) que foi cadastrado,
+  // não um texto genérico - só quando dá pra ter certeza de qual é (as
+  // referências marcadas hoje são todas do mesmo tipo, que é o normal:
+  // cada obra/cliente usa um tipo só). Se por algum motivo raro misturar
+  // tipos diferentes no mesmo dia, aí sim usa um rótulo genérico.
+  const tiposMarcadosHoje = Array.from(new Set(referenciasHoje.map((r) => r.tipo)));
+  const rotuloReferenciasHoje = tiposMarcadosHoje.length === 1 ? tiposMarcadosHoje[0] : "Referências";
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
@@ -119,7 +127,7 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
       {(textoReferenciasHoje || obra?.gm_codigo) && (
         <div className="flex flex-col gap-1.5 -mt-1">
           <p className="text-xs text-gray-400">
-            {referenciasHoje.length > 0 ? "Trabalhando hoje" : "GM"}
+            {referenciasHoje.length > 0 ? rotuloReferenciasHoje : "GM"}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {referenciasHoje.length > 0 ? (
