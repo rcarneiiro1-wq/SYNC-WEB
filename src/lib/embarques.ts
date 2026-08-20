@@ -326,21 +326,15 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 
   const idsEmbarques = embarques.map((e) => e.id);
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
-  const { data: rdos, error: erroRdos } = await supabase
-    .from("rdos")
-    .select("*")
-    .in("embarque_id", idsEmbarques)
-    .order("numero_rdo", { ascending: false });
+
+  const [{ data: rdos, error: erroRdos }, referenciasPorObra, { data: anexos, error: erroAnexos }] =
+    await Promise.all([
+      supabase.from("rdos").select("*").in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
+      buscarReferenciasPorObra(idsObras),
+      supabase.from("anexos_embarque").select("*").in("embarque_id", idsEmbarques).order("enviado_em", { ascending: false }),
+    ]);
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
-
-  const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
-
-  const { data: anexos, error: erroAnexos } = await supabase
-    .from("anexos_embarque")
-    .select("*")
-    .in("embarque_id", idsEmbarques)
-    .order("enviado_em", { ascending: false });
   // se der erro (ex: tabela ainda não criada no Supabase), não trava o
   // histórico inteiro por causa disso - só mostra sem os anexos
   const anexosPorEmbarque = new Map<number, AnexoEmbarque[]>();
