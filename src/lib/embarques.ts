@@ -47,6 +47,7 @@ export type Rdo = {
   descricao: string | null;
   arquivo_pdf_url: string | null;
   justificativa_percentual: string | null;
+  referencias_dia_json: string | null;
 };
 
 export type ItensPorStatus = {
@@ -54,6 +55,8 @@ export type ItensPorStatus = {
   em_andamento: string[];
   a_iniciar: string[];
 };
+
+export type ReferenciaDoDia = { tipo: string; codigo: string };
 
 export type LinhaEmbarque = {
   embarque: Embarque;
@@ -67,6 +70,7 @@ export type LinhaEmbarque = {
   percentualDescasado: boolean;
   percentualPelosItens: number | null;
   referencias: ReferenciaObra[];
+  referenciasHoje: ReferenciaDoDia[];
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -133,6 +137,22 @@ function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
     return vazio;
   } catch {
     return vazio;
+  }
+}
+
+/** Quais referências (GM/MD/SS/WO) a pessoa marcou como "trabalhadas hoje"
+ * no RDO mais recente - é isso que deve aparecer em destaque no lugar do
+ * campo fixo de GM, NÃO a lista inteira de referências cadastradas na
+ * obra (essa lista completa fica guardada à parte, como histórico/auditoria,
+ * mas o destaque do card é sempre "o que está rolando agora"). */
+function referenciasDoDia(rdo: Rdo | undefined): ReferenciaDoDia[] {
+  if (!rdo?.referencias_dia_json) return [];
+  try {
+    const lista = JSON.parse(rdo.referencias_dia_json) as ReferenciaDoDia[];
+    if (!Array.isArray(lista)) return [];
+    return lista.filter((r) => r && r.tipo && r.codigo);
+  } catch {
+    return [];
   }
 }
 
@@ -443,6 +463,7 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
       percentualDescasado: temDescompassoDePercentual(ultimoRdo),
       percentualPelosItens: percentualPelosItens(ultimoRdo),
       referencias: referenciasPorObra.get(embarque.obra_id) || [],
+      referenciasHoje: referenciasDoDia(ultimoRdo),
     };
   });
 }
