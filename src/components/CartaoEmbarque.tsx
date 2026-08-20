@@ -84,19 +84,6 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
         <dt className="text-gray-400">Obra / Plataforma</dt>
         <dd className="text-right text-gray-700 font-medium">{embarque.obra_nome || "-"}</dd>
 
-        {/* Destaque: o que foi marcado no RDO de HOJE (nome dinâmico -
-            GM, SS ou WO, conforme o que foi cadastrado). Só cai no campo
-            fixo antigo (Código GM da obra) se não tiver nada marcado hoje
-            ainda - obras que não usam o cadastro novo de referências. */}
-        {(textoReferenciasHoje || obra?.gm_codigo) && (
-          <>
-            <dt className="text-gray-400">{textoReferenciasHoje ? "Trabalhando hoje" : "GM"}</dt>
-            <dd className="text-right text-gray-700 font-medium">
-              {textoReferenciasHoje || `GM - ${obra?.gm_codigo}`}
-            </dd>
-          </>
-        )}
-
         <dt className="text-gray-400">Empresa</dt>
         <dd className="text-right text-gray-700">{obra?.empresa || "-"}</dd>
 
@@ -121,6 +108,37 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           </>
         )}
       </dl>
+
+      {/* Destaque: o que foi marcado no RDO de HOJE (nome dinâmico - GM,
+          SS ou WO, conforme o que foi cadastrado). Em pílulas em vez de
+          texto dentro da tabela, pra não quebrar linha de forma torta
+          quando o código é comprido ou tem mais de uma referência - cada
+          uma quebra sozinha, do jeito certo. Só cai no campo fixo antigo
+          (Código GM da obra) se não tiver nada marcado hoje ainda - obras
+          que não usam o cadastro novo de referências. */}
+      {(textoReferenciasHoje || obra?.gm_codigo) && (
+        <div className="flex flex-col gap-1.5 -mt-1">
+          <p className="text-xs text-gray-400">
+            {referenciasHoje.length > 0 ? "Trabalhando hoje" : "GM"}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {referenciasHoje.length > 0 ? (
+              referenciasHoje.map((r, i) => (
+                <span
+                  key={`${r.tipo}-${r.codigo}-${i}`}
+                  className="text-xs font-semibold px-2 py-1 rounded-full bg-azul/10 text-azul whitespace-nowrap"
+                >
+                  {r.tipo} - {r.codigo}
+                </span>
+              ))
+            ) : (
+              <span className="text-xs font-semibold px-2 py-1 rounded-full bg-azul/10 text-azul">
+                GM - {obra?.gm_codigo}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {temPendencia && (
         <div className="bg-amarelo/10 border border-amarelo/25 text-amarelo text-xs rounded-md px-3 py-2">
