@@ -38,13 +38,23 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
   const {
     embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes,
-    percentualDescasado, percentualPelosItens, referencias,
+    percentualDescasado, percentualPelosItens, referencias, referenciasHoje,
   } = linha;
   const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
   const temPendencia = rdosPendentes > 0;
 
   const referenciasAtivas = referencias.filter((r) => r.status === "ativa");
   const referenciasEncerradas = referencias.filter((r) => r.status !== "ativa");
+
+  // O que aparece em destaque (onde antes só tinha o campo fixo "GM") é o
+  // que foi MARCADO no RDO de hoje - com o nome certo (GM, SS, WO...)
+  // conforme o tipo que a pessoa cadastrou, não um rótulo fixo. Só cai no
+  // Código GM fixo da obra se não tiver NENHUMA referência marcada hoje
+  // (obras antigas que ainda não usam o cadastro novo).
+  const textoReferenciasHoje =
+    referenciasHoje.length > 0
+      ? referenciasHoje.map((r) => `${r.tipo} - ${r.codigo}`).join("   |   ")
+      : null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
@@ -74,12 +84,16 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
         <dt className="text-gray-400">Obra / Plataforma</dt>
         <dd className="text-right text-gray-700 font-medium">{embarque.obra_nome || "-"}</dd>
 
-        {/* Campo antigo (Código GM fixo da obra) - só aparece se essa obra
-            ainda não usa o cadastro novo de referências abaixo. */}
-        {referencias.length === 0 && obra?.gm_codigo && (
+        {/* Destaque: o que foi marcado no RDO de HOJE (nome dinâmico -
+            GM, SS ou WO, conforme o que foi cadastrado). Só cai no campo
+            fixo antigo (Código GM da obra) se não tiver nada marcado hoje
+            ainda - obras que não usam o cadastro novo de referências. */}
+        {(textoReferenciasHoje || obra?.gm_codigo) && (
           <>
-            <dt className="text-gray-400">GM</dt>
-            <dd className="text-right text-gray-700 font-medium">GM - {obra.gm_codigo}</dd>
+            <dt className="text-gray-400">{textoReferenciasHoje ? "Trabalhando hoje" : "GM"}</dt>
+            <dd className="text-right text-gray-700 font-medium">
+              {textoReferenciasHoje || `GM - ${obra?.gm_codigo}`}
+            </dd>
           </>
         )}
 
@@ -130,7 +144,7 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Referências (GM / MD / SS / WO)
+                Todas as referências cadastradas nesta obra
               </p>
               {referenciasEncerradas.length > 0 && (
                 <button
