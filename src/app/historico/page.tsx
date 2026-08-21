@@ -1,153 +1,94 @@
-"use client";
+import { buscarEmbarquesFinalizados, buscarOpcoesFiltro, type LinhaHistorico, type FiltrosHistorico } from "@/lib/embarques";
+import { Cabecalho } from "@/components/Cabecalho";
+import { TabelaHistorico } from "@/components/TabelaHistorico";
+import { FiltroHistorico } from "@/components/FiltroHistorico";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
 
-type ValoresFiltro = {
-  colaborador: string;
-  obra: string;
-  situacao: string;
-  dataInicio: string;
-  dataFim: string;
-};
+type ParametrosBusca = { [chave: string]: string | string[] | undefined };
 
-export function FiltroHistorico({
-  colaboradoresSugeridos,
-  obrasSugeridas,
-  valoresIniciais,
+function _texto(valor: string | string[] | undefined): string | undefined {
+  // o Next.js tipa cada parâmetro da URL como string OU lista de strings
+  // (caso o mesmo parâmetro apareça repetido na URL) - aqui a gente só
+  // usa o primeiro valor, que é o caso normal (99,9% das vezes)
+  if (Array.isArray(valor)) return valor[0];
+  return valor;
+}
+
+export default async function PaginaHistorico({
+  searchParams,
 }: {
-  colaboradoresSugeridos: string[];
-  obrasSugeridas: string[];
-  valoresIniciais: ValoresFiltro;
+  searchParams: Promise<ParametrosBusca>;
 }) {
-  const router = useRouter();
-  const [colaborador, setColaborador] = useState(valoresIniciais.colaborador);
-  const [obra, setObra] = useState(valoresIniciais.obra);
-  const [situacao, setSituacao] = useState(valoresIniciais.situacao);
-  const [dataInicio, setDataInicio] = useState(valoresIniciais.dataInicio);
-  const [dataFim, setDataFim] = useState(valoresIniciais.dataFim);
+  const params = await searchParams;
 
-  function buscar(e: React.FormEvent) {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    if (colaborador) params.set("colaborador", colaborador);
-    if (obra) params.set("obra", obra);
-    if (situacao && situacao !== "todos") params.set("situacao", situacao);
-    if (dataInicio) params.set("dataInicio", dataInicio);
-    if (dataFim) params.set("dataFim", dataFim);
-    const querystring = params.toString();
-    router.push(`/historico${querystring ? `?${querystring}` : ""}`);
+  const filtros: FiltrosHistorico = {
+    colaborador: _texto(params.colaborador),
+    obra: _texto(params.obra),
+    dataInicio: _texto(params.dataInicio),
+    dataFim: _texto(params.dataFim),
+    situacao: (_texto(params.situacao) as FiltrosHistorico["situacao"]) || "todos",
+  };
+
+  let linhas: LinhaHistorico[] = [];
+  let erro: string | null = null;
+  let opcoes: { colaboradores: string[]; obras: string[] } = { colaboradores: [], obras: [] };
+
+  try {
+    const [linhasResultado, opcoesResultado] = await Promise.all([
+      buscarEmbarquesFinalizados(filtros),
+      buscarOpcoesFiltro(),
+    ]);
+    linhas = linhasResultado;
+    opcoes = opcoesResultado;
+  } catch (e) {
+    erro = e instanceof Error ? e.message : "Erro desconhecido.";
   }
 
-  function limpar() {
-    setColaborador("");
-    setObra("");
-    setSituacao("todos");
-    setDataInicio("");
-    setDataFim("");
-    router.push("/historico");
-  }
+  const temFiltroAtivo = Boolean(
+    filtros.colaborador || filtros.obra || filtros.dataInicio || filtros.dataFim ||
+      (filtros.situacao && filtros.situacao !== "todos")
+  );
 
   return (
-    <form
-      onSubmit={buscar}
-      className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-wrap items-end gap-4"
-    >
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-colaborador">
-          Colaborador
-        </label>
-        <input
-          id="filtro-colaborador"
-          list="lista-colaboradores"
-          value={colaborador}
-          onChange={(e) => setColaborador(e.target.value)}
-          placeholder="Nome..."
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-azul"
+    <div className="min-h-screen">
+      <Cabecalho paginaAtiva="historico" />
+
+      <main className="max-w-5xl mx-auto px-6 py-8">
+        <h1 className="text-xl font-bold text-navy mb-6">Histórico de embarques finalizados</h1>
+
+        <FiltroHistorico
+          colaboradoresSugeridos={opcoes.colaboradores}
+          obrasSugeridas={opcoes.obras}
+          valoresIniciais={{
+            colaborador: filtros.colaborador ?? "",
+            obra: filtros.obra ?? "",
+            situacao: filtros.situacao ?? "todos",
+            dataInicio: filtros.dataInicio ?? "",
+            dataFim: filtros.dataFim ?? "",
+          }}
         />
-        <datalist id="lista-colaboradores">
-          {colaboradoresSugeridos.map((nome) => (
-            <option key={nome} value={nome} />
-          ))}
-        </datalist>
-      </div>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-obra">
-          Obra / Plataforma
-        </label>
-        <input
-          id="filtro-obra"
-          list="lista-obras"
-          value={obra}
-          onChange={(e) => setObra(e.target.value)}
-          placeholder="Plataforma..."
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-1 focus:ring-azul"
-        />
-        <datalist id="lista-obras">
-          {obrasSugeridas.map((nome) => (
-            <option key={nome} value={nome} />
-          ))}
-        </datalist>
-      </div>
+        {erro && (
+          <div className="bg-vermelho/10 border border-vermelho/30 text-vermelho rounded-md px-4 py-3 text-sm mb-6">
+            Não consegui buscar os dados agora. Detalhe: {erro}
+          </div>
+        )}
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-situacao">
-          Situação
-        </label>
-        <select
-          id="filtro-situacao"
-          value={situacao}
-          onChange={(e) => setSituacao(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-        >
-          <option value="todos">Todos</option>
-          <option value="concluido">Só em dia</option>
-          <option value="pendencia">Só com pendência</option>
-        </select>
-      </div>
+        {!erro && linhas.length === 0 && (
+          <div className="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-gray-500">
+            {temFiltroAtivo
+              ? "Nenhum embarque encontrado com esses filtros."
+              : "Nenhum embarque finalizado ainda."}
+          </div>
+        )}
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-data-inicio">
-          De
-        </label>
-        <input
-          id="filtro-data-inicio"
-          type="date"
-          value={dataInicio}
-          onChange={(e) => setDataInicio(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-        />
-      </div>
+        {!erro && linhas.length > 0 && <TabelaHistorico linhas={linhas} />}
+      </main>
 
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-data-fim">
-          Até
-        </label>
-        <input
-          id="filtro-data-fim"
-          type="date"
-          value={dataFim}
-          onChange={(e) => setDataFim(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-        />
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          className="bg-azul text-white text-sm font-medium px-4 py-1.5 rounded-md hover:bg-azul-escuro cursor-pointer"
-        >
-          🔍 Buscar
-        </button>
-        <button
-          type="button"
-          onClick={limpar}
-          className="text-sm text-gray-500 hover:text-gray-700 px-2 cursor-pointer"
-        >
-          Limpar
-        </button>
-      </div>
-    </form>
+      <footer className="text-center text-xs text-gray-400 py-8">
+        Developed by Rafael Carneiro · Sync ERP
+      </footer>
+    </div>
   );
 }
