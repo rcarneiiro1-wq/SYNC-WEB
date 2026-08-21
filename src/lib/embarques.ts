@@ -198,12 +198,12 @@ export function hojeIsoBrasil(): string {
  * se fosse de hoje. Sem isso, um recado esquecido ficaria sempre visível.
  * Devolve também a hora (pro coordenador saber se é um aviso fresquinho
  * ou já de mais cedo no mesmo dia). */
-export function recadoDeHoje(embarque: Embarque): { texto: string; hora: string } | null {
+export function recadoDeHoje(embarque: Embarque): { texto: string; hora: string; data: string } | null {
   if (!embarque.recado_dia || !embarque.recado_dia_atualizado_em) return null;
   const dataDoRecado = embarque.recado_dia_atualizado_em.slice(0, 10);
   if (dataDoRecado !== hojeIsoBrasil()) return null;
   const hora = embarque.recado_dia_atualizado_em.slice(11, 16) || "-";
-  return { texto: embarque.recado_dia, hora };
+  return { texto: embarque.recado_dia, hora, data: formatarDataBr(dataDoRecado) };
 }
 
 function diasDesde(dataIso: string | null): number | null {
