@@ -11,6 +11,8 @@ export type Embarque = {
   ativo: boolean;
   status_final: string | null; // "completo" | "com_pendencia" | null (ainda ativo, ou embarque antigo sem essa info)
   justificativa_encerramento: string | null;
+  recado_dia: string | null; // aviso rápido do dia (ex: "vento forte, sem operação hoje")
+  recado_dia_atualizado_em: string | null;
 };
 
 export type Obra = {
@@ -191,6 +193,15 @@ export function hojeIsoBrasil(): string {
   return formatter.format(new Date()); // en-CA formata como AAAA-MM-DD
 }
 
+/** Só mostra o recado se ele foi escrito HOJE - um aviso de "vento forte"
+ * de 3 dias atrás não deveria continuar aparecendo pro coordenador como
+ * se fosse de hoje. Sem isso, um recado esquecido ficaria sempre visível. */
+export function recadoDeHoje(embarque: Embarque): string | null {
+  if (!embarque.recado_dia || !embarque.recado_dia_atualizado_em) return null;
+  const dataDoRecado = embarque.recado_dia_atualizado_em.slice(0, 10);
+  return dataDoRecado === hojeIsoBrasil() ? embarque.recado_dia : null;
+}
+
 function diasDesde(dataIso: string | null): number | null {
   if (!dataIso) return null;
   // tanto "embarques.data_inicio" (AAAA-MM-DD) quanto "rdos.data"
@@ -326,15 +337,21 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 
   const idsEmbarques = embarques.map((e) => e.id);
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
-
-  const [{ data: rdos, error: erroRdos }, referenciasPorObra, { data: anexos, error: erroAnexos }] =
-    await Promise.all([
-      supabase.from("rdos").select("*").in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
-      buscarReferenciasPorObra(idsObras),
-      supabase.from("anexos_embarque").select("*").in("embarque_id", idsEmbarques).order("enviado_em", { ascending: false }),
-    ]);
+  const { data: rdos, error: erroRdos } = await supabase
+    .from("rdos")
+    .select("*")
+    .in("embarque_id", idsEmbarques)
+    .order("numero_rdo", { ascending: false });
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+
+  const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
+
+  const { data: anexos, error: erroAnexos } = await supabase
+    .from("anexos_embarque")
+    .select("*")
+    .in("embarque_id", idsEmbarques)
+    .order("enviado_em", { ascending: false });
   // se der erro (ex: tabela ainda não criada no Supabase), não trava o
   // histórico inteiro por causa disso - só mostra sem os anexos
   const anexosPorEmbarque = new Map<number, AnexoEmbarque[]>();
