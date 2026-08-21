@@ -195,11 +195,15 @@ export function hojeIsoBrasil(): string {
 
 /** Só mostra o recado se ele foi escrito HOJE - um aviso de "vento forte"
  * de 3 dias atrás não deveria continuar aparecendo pro coordenador como
- * se fosse de hoje. Sem isso, um recado esquecido ficaria sempre visível. */
-export function recadoDeHoje(embarque: Embarque): string | null {
+ * se fosse de hoje. Sem isso, um recado esquecido ficaria sempre visível.
+ * Devolve também a hora (pro coordenador saber se é um aviso fresquinho
+ * ou já de mais cedo no mesmo dia). */
+export function recadoDeHoje(embarque: Embarque): { texto: string; hora: string } | null {
   if (!embarque.recado_dia || !embarque.recado_dia_atualizado_em) return null;
   const dataDoRecado = embarque.recado_dia_atualizado_em.slice(0, 10);
-  return dataDoRecado === hojeIsoBrasil() ? embarque.recado_dia : null;
+  if (dataDoRecado !== hojeIsoBrasil()) return null;
+  const hora = embarque.recado_dia_atualizado_em.slice(11, 16) || "-";
+  return { texto: embarque.recado_dia, hora };
 }
 
 function diasDesde(dataIso: string | null): number | null {
