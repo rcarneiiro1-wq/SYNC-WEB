@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatarDataBr, type LinhaEmbarque, type ReferenciaObra } from "@/lib/embarques";
+import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type ReferenciaObra } from "@/lib/embarques";
 
 function corPercentual(percentual: number | null): string {
   if (percentual === null) return "bg-gray-200 text-gray-500";
@@ -64,8 +64,16 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
   const tiposMarcadosHoje = Array.from(new Set(referenciasHoje.map((r) => r.tipo)));
   const rotuloReferenciasHoje = tiposMarcadosHoje.length === 1 ? tiposMarcadosHoje[0] : "Referências";
 
+  const recado = recadoDeHoje(embarque);
+
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
+      {recado && (
+        <div className="bg-azul/10 border border-azul/25 text-azul text-sm rounded-md px-3 py-2 flex items-start gap-2">
+          <span>📢</span>
+          <span>{recado}</span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
