@@ -69,11 +69,11 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5 flex flex-col gap-3">
       {recado && (
-        <div className="bg-azul/10 border border-azul/25 text-azul text-sm rounded-md px-3 py-2 flex items-start gap-2">
-          <span>📢</span>
-          <span>
-            {recado.texto} <span className="text-azul/60 text-xs">— às {recado.hora}</span>
+        <div className="bg-azul/10 border border-azul/25 text-azul text-sm rounded-md px-3 py-2 flex flex-col gap-1">
+          <span className="text-[11px] font-bold uppercase tracking-wide">
+            📢 Recado do dia — {recado.data} {recado.hora}Hrs
           </span>
+          <span>{recado.texto}</span>
         </div>
       )}
       <div className="flex items-start justify-between gap-3">
