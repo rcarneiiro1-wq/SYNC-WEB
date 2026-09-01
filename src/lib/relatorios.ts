@@ -88,7 +88,7 @@ function intervaloRealDoEmbarque(embarque: Embarque, rdos: Rdo[]): { inicio: str
 }
 
 export type DetalheEmbarqueRelatorio = {
-  embarqueId: number;
+  embarqueId: string;
   colaborador: string;
   obra: string;
   periodoNoRecorte: string; // ex: "05/08 → 12/08" - só a parte que caiu dentro do período pedido
@@ -126,9 +126,23 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
   // pega embarques que comecaram até o fim do período E (ainda não
   // acabaram, OU acabaram depois do início do período) - ou seja,
   // qualquer embarque que tenha ALGUMA sobreposição possível com o período
+  // IDs (id, obra_id, embarque_id...) são gerados a partir de um hash do
+  // usuário de login, então passam de Number.MAX_SAFE_INTEGER - pedir
+  // com `::text` (em vez de `select("*")`) evita que o JS arredonde o
+  // valor e quebre o cruzamento com "obras"/"rdos" mais abaixo (mesmo
+  // bug corrigido em embarques.ts).
+  const COLUNAS_EMBARQUES =
+    "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+    "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em";
+  const COLUNAS_OBRAS =
+    "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo";
+  const COLUNAS_RDOS =
+    "id::text, embarque_id::text, numero_rdo, data, local_atuacao, status, arquivo_pdf_url, avanco_json, " +
+    "avanco_percentual, descricao, justificativa_percentual, atualizado_em, referencias_dia_json";
+
   const { data: embarques, error: erroEmb } = await supabase
     .from("embarques")
-    .select("*")
+    .select(COLUNAS_EMBARQUES)
     .lte("data_inicio", periodo.fim)
     .or(`data_fim.gte.${periodo.inicio},data_fim.is.null`);
 
@@ -139,15 +153,15 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
   const idsEmbarques = embarques.map((e) => e.id);
 
   const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }] = await Promise.all([
-    supabase.from("obras").select("*").in("id", idsObras),
-    supabase.from("rdos").select("*").in("embarque_id", idsEmbarques),
+    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+    supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques),
   ]);
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
 
-  const obrasPorId = new Map<number, Obra>((obras || []).map((o) => [o.id, o]));
-  const rdosPorEmbarque = new Map<number, Rdo[]>();
+  const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
   for (const rdo of rdos || []) {
     const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
     lista.push(rdo);

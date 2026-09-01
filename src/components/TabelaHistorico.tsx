@@ -263,7 +263,9 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   const [agruparPorPessoa, setAgruparPorPessoa] = useState(false);
   const [ordenarPor, setOrdenarPor] = useState<ColunaOrdenavel | null>(null);
   const [ordemAsc, setOrdemAsc] = useState(false);
-  const [expandidoId, setExpandidoId] = useState<number | null>(null);
+  // string, não number: o id do embarque é maior do que o JS consegue
+  // representar com precisão como número (ver comentário em embarques.ts)
+  const [expandidoId, setExpandidoId] = useState<string | null>(null);
 
   const aoClicarColuna = (coluna: ColunaOrdenavel) => {
     if (ordenarPor === coluna) {

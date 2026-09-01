@@ -1,8 +1,23 @@
 import { supabase } from "@/lib/supabase";
 
+// IMPORTANTE: todo ID (id, obra_id, embarque_id, ...) é `string`, NUNCA
+// `number`. O sistema gera esses IDs a partir de um hash do usuário de
+// login (pra nunca colidir entre pessoas diferentes sincronizando),
+// então eles são MUITO maiores do que o JavaScript consegue representar
+// com precisão como número (Number.MAX_SAFE_INTEGER = 9007199254740991 -
+// IDs reais já passam disso). Se um desses vira `number` em algum
+// momento, o valor é arredondado silenciosamente, e qualquer busca que
+// use esse valor arredondado pra achar o registro relacionado (obra de
+// um embarque, RDOs de um embarque, etc.) simplesmente não acha nada -
+// foi exatamente esse bug que fazia "Empresa" e "Previsão de
+// desembarque" aparecerem vazios no card, mesmo o dado existindo certo
+// na nuvem. Por isso as queries abaixo pedem esses campos com `::text`
+// (em vez de `select("*")`), e tudo aqui trata id como string: nunca usar
+// `Number(id)`, nunca declarar `Map<number, ...>` pra essas chaves.
+
 export type Embarque = {
-  id: number;
-  obra_id: number;
+  id: string;
+  obra_id: string;
   obra_nome: string | null;
   efetivo_nome: string | null;
   efetivo_funcao: string | null;
@@ -16,7 +31,7 @@ export type Embarque = {
 };
 
 export type Obra = {
-  id: number;
+  id: string;
   nome: string | null;
   empresa: string | null;
   local_flotel: string | null;
@@ -27,8 +42,8 @@ export type Obra = {
 };
 
 export type ReferenciaObra = {
-  id: number;
-  obra_id: number;
+  id: string;
+  obra_id: string;
   tipo: string;
   codigo: string;
   status: string; // "ativa" | "encerrada"
@@ -38,8 +53,8 @@ export type ReferenciaObra = {
 };
 
 export type Rdo = {
-  id: number;
-  embarque_id: number;
+  id: string;
+  embarque_id: string;
   numero_rdo: number;
   data: string | null;
   local_atuacao: string | null;
@@ -162,12 +177,12 @@ function referenciasDoDia(rdo: Rdo | undefined): ReferenciaDoDia[] {
  * já agrupadas por obra_id - pra não precisar de uma query por obra.
  * Se a tabela ainda não existir no Supabase (projeto não migrado ainda),
  * não trava a página - só devolve vazio, igual já é feito com anexos. */
-async function buscarReferenciasPorObra(idsObras: number[]): Promise<Map<number, ReferenciaObra[]>> {
-  const mapa = new Map<number, ReferenciaObra[]>();
+async function buscarReferenciasPorObra(idsObras: string[]): Promise<Map<string, ReferenciaObra[]>> {
+  const mapa = new Map<string, ReferenciaObra[]>();
   if (idsObras.length === 0) return mapa;
   const { data, error } = await supabase
     .from("obra_referencias")
-    .select("*")
+    .select("id::text, obra_id::text, tipo, codigo, status, data_abertura, data_encerramento, observacao")
     .in("obra_id", idsObras)
     .order("tipo", { ascending: true })
     .order("codigo", { ascending: true });
@@ -247,14 +262,14 @@ export function formatarDataBr(dataIso: string | null): string {
 }
 
 export type RdoResumo = {
-  id: number;
+  id: string;
   numeroRdo: number;
   data: string | null;
   pdfUrl: string | null;
 };
 
 export type AnexoEmbarque = {
-  id: number;
+  id: string;
   nomeArquivo: string;
   url: string | null;
   enviadoPor: string | null;
@@ -326,8 +341,17 @@ export async function buscarOpcoesFiltro(): Promise<{ colaboradores: string[]; o
   return { colaboradores, obras };
 }
 
+const COLUNAS_EMBARQUES =
+  "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+  "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em";
+const COLUNAS_OBRAS =
+  "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo";
+const COLUNAS_RDOS =
+  "id::text, embarque_id::text, numero_rdo, data, local_atuacao, status, arquivo_pdf_url, avanco_json, " +
+  "avanco_percentual, descricao, justificativa_percentual, atualizado_em, referencias_dia_json";
+
 export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {}): Promise<LinhaHistorico[]> {
-  let query = supabase.from("embarques").select("*").eq("ativo", false);
+  let query = supabase.from("embarques").select(COLUNAS_EMBARQUES).eq("ativo", false);
   if (filtros.colaborador) query = query.ilike("efetivo_nome", `%${filtros.colaborador}%`);
   if (filtros.obra) query = query.ilike("obra_nome", `%${filtros.obra}%`);
   if (filtros.dataInicio) query = query.gte("data_inicio", filtros.dataInicio);
@@ -343,7 +367,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const { data: rdos, error: erroRdos } = await supabase
     .from("rdos")
-    .select("*")
+    .select(COLUNAS_RDOS)
     .in("embarque_id", idsEmbarques)
     .order("numero_rdo", { ascending: false });
 
@@ -353,12 +377,12 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 
   const { data: anexos, error: erroAnexos } = await supabase
     .from("anexos_embarque")
-    .select("*")
+    .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
     .in("embarque_id", idsEmbarques)
     .order("enviado_em", { ascending: false });
   // se der erro (ex: tabela ainda não criada no Supabase), não trava o
   // histórico inteiro por causa disso - só mostra sem os anexos
-  const anexosPorEmbarque = new Map<number, AnexoEmbarque[]>();
+  const anexosPorEmbarque = new Map<string, AnexoEmbarque[]>();
   for (const anexo of erroAnexos ? [] : anexos || []) {
     const lista = anexosPorEmbarque.get(anexo.embarque_id) || [];
     lista.push({
@@ -368,7 +392,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
     anexosPorEmbarque.set(anexo.embarque_id, lista);
   }
 
-  const rdosPorEmbarque = new Map<number, Rdo[]>();
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
   for (const rdo of rdos || []) {
     const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
     lista.push(rdo);
@@ -417,7 +441,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   const { data: embarques, error: erroEmb } = await supabase
     .from("embarques")
-    .select("*")
+    .select(COLUNAS_EMBARQUES)
     .eq("ativo", true)
     .order("data_inicio", { ascending: false });
 
@@ -428,16 +452,16 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   const idsEmbarques = embarques.map((e) => e.id);
 
   const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }, referenciasPorObra] = await Promise.all([
-    supabase.from("obras").select("*").in("id", idsObras),
-    supabase.from("rdos").select("*").in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
+    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+    supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
     buscarReferenciasPorObra(idsObras),
   ]);
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
 
-  const obrasPorId = new Map<number, Obra>((obras || []).map((o) => [o.id, o]));
-  const rdosPorEmbarque = new Map<number, Rdo[]>();
+  const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
   for (const rdo of rdos || []) {
     const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
     lista.push(rdo);
