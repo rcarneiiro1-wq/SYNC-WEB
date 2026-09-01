@@ -15,6 +15,7 @@ export type SessaoUsuario = {
   usuario: string;
   nome: string;
   ehAdmin: boolean;
+  funcao?: string;
 };
 
 /** A chave de assinatura é a própria service_role key - já é um segredo

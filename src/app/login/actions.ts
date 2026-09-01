@@ -18,7 +18,7 @@ export async function entrar(formData: FormData) {
   const admin = criarClienteAdmin();
   const { data: linha } = await admin
     .from("usuarios")
-    .select("usuario, nome, senha_hash, senha_salt, eh_admin, ativo, permissoes")
+    .select("usuario, nome, funcao, senha_hash, senha_salt, eh_admin, ativo, permissoes")
     .ilike("usuario", usuario)
     .maybeSingle();
 
@@ -50,6 +50,7 @@ export async function entrar(formData: FormData) {
     usuario: linha.usuario,
     nome: linha.nome,
     ehAdmin: Boolean(linha.eh_admin),
+    funcao: linha.funcao || undefined,
   });
   const jar = await cookies();
   jar.set(NOME_COOKIE_USUARIO, cookieValor, {
