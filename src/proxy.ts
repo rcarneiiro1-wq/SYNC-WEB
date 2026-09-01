@@ -22,5 +22,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // além do login e dos internos do Next, deixa passar direto qualquer
+  // arquivo estático de public/ (logo, ícones, imagens) - sem isso, a
+  // logo na PRÓPRIA tela de login era barrada pelo middleware (pedia
+  // login pra carregar a imagem, e virava ícone de "imagem quebrada"
+  // bem na tela que deveria estar mostrando ela)
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp)$).*)"],
 };
