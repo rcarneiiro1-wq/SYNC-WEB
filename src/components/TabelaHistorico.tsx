@@ -31,7 +31,7 @@ function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
 }
 
 function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
-  const { embarque, itensAvanco, justificativa, rdos } = linha;
+  const { embarque, itensAvanco, justificativa, rdos, referencias } = linha;
   const justificativaEncerramento = embarque.justificativa_encerramento;
   return (
     <tr>
@@ -63,6 +63,31 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
               <div className="mt-3 bg-gray-100 border border-gray-200 rounded-md px-3 py-2">
                 <p className="text-xs font-semibold text-gray-500 mb-1">📝 Observação registrada num RDO</p>
                 <p className="text-xs text-gray-600 whitespace-pre-wrap">{justificativa}</p>
+              </div>
+            )}
+
+            {referencias.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Referências da obra (GM / MD / SS / WO)
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {referencias.map((r) => (
+                    <span
+                      key={r.id}
+                      className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
+                        r.status === "ativa" ? "bg-azul/10 text-azul" : "bg-verde/10 text-verde"
+                      }`}
+                      title={
+                        r.status === "ativa"
+                          ? r.data_abertura ? `Aberta em ${formatarDataBr(r.data_abertura)}` : undefined
+                          : r.data_encerramento ? `Finalizada em ${formatarDataBr(r.data_encerramento)}` : "Finalizada"
+                      }
+                    >
+                      {r.status === "ativa" ? "●" : "✓"} {r.tipo} - {r.codigo}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -97,6 +122,37 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
               </div>
             )}
           </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            📎 Relatórios assinados ({linha.anexos.length})
+          </p>
+          {linha.anexos.length === 0 ? (
+            <p className="text-xs text-gray-400">Nenhum relatório assinado anexado ainda.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {linha.anexos.map((anexo) => (
+                <a
+                  key={anexo.id}
+                  href={anexo.url ?? undefined}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`flex items-center gap-2 text-sm bg-white rounded px-3 py-1.5 border ${
+                    anexo.url ? "border-gray-100 hover:border-azul" : "border-gray-100 pointer-events-none opacity-60"
+                  }`}
+                  title={anexo.enviadoPor ? `Anexado por ${anexo.enviadoPor}` : undefined}
+                >
+                  <span className="text-gray-600">{anexo.nomeArquivo}</span>
+                  {anexo.url ? (
+                    <span className="text-azul font-medium whitespace-nowrap">Abrir ↗</span>
+                  ) : (
+                    <span className="text-gray-300 text-xs whitespace-nowrap">enviando...</span>
+                  )}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </td>
     </tr>
@@ -171,6 +227,14 @@ function LinhaTabela({
           <ResumoItens itensAvanco={itensAvanco} />
           {(embarque.justificativa_encerramento || justificativa) && (
             <span className="text-xs" title="Tem justificativa registrada">📝</span>
+          )}
+          {linha.anexos.length > 0 && (
+            <span
+              className="inline-flex items-center gap-1 bg-azul/10 text-azul text-xs font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
+              title={`${linha.anexos.length} relatório(s) assinado(s) anexado(s)`}
+            >
+              📎 {linha.anexos.length}
+            </span>
           )}
         </div>
       </td>

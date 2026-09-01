@@ -11,6 +11,8 @@ export type Embarque = {
   ativo: boolean;
   status_final: string | null; // "completo" | "com_pendencia" | null (ainda ativo, ou embarque antigo sem essa info)
   justificativa_encerramento: string | null;
+  recado_dia: string | null; // aviso rápido do dia (ex: "vento forte, sem operação hoje")
+  recado_dia_atualizado_em: string | null;
 };
 
 export type Obra = {
@@ -22,6 +24,17 @@ export type Obra = {
   gm_codigo: string | null;
   prefixo_rdo: string | null;
   data_desembarque_prevista: string | null;
+};
+
+export type ReferenciaObra = {
+  id: number;
+  obra_id: number;
+  tipo: string;
+  codigo: string;
+  status: string; // "ativa" | "encerrada"
+  data_abertura: string | null;
+  data_encerramento: string | null;
+  observacao: string | null;
 };
 
 export type Rdo = {
@@ -36,6 +49,7 @@ export type Rdo = {
   descricao: string | null;
   arquivo_pdf_url: string | null;
   justificativa_percentual: string | null;
+  referencias_dia_json: string | null;
 };
 
 export type ItensPorStatus = {
@@ -43,6 +57,8 @@ export type ItensPorStatus = {
   em_andamento: string[];
   a_iniciar: string[];
 };
+
+export type ReferenciaDoDia = { tipo: string; codigo: string };
 
 export type LinhaEmbarque = {
   embarque: Embarque;
@@ -55,6 +71,8 @@ export type LinhaEmbarque = {
   rdosPendentes: number;
   percentualDescasado: boolean;
   percentualPelosItens: number | null;
+  referencias: ReferenciaObra[];
+  referenciasHoje: ReferenciaDoDia[];
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -68,33 +86,40 @@ function percentualDoRdo(rdo: Rdo | undefined): number | null {
   return percentualPelosItens(rdo);
 }
 
-/** % calculado só pelos itens marcados no checklist (FLARE/PROA/...),
- * ignorando o campo de % geral digitado à mão - serve pra comparar com
- * o percentualDoRdo() e detectar quando a pessoa digitou um número
- * geral que não bate com o que ela realmente marcou item por item. */
+/** % calculado pelos itens do checklist (FLARE/PROA/...), pra comparar
+ * com o percentualDoRdo() e pegar quando o número digitado à mão está
+ * bem fora do que os itens mostram. Concluído conta como 100%, em
+ * andamento conta como 50% (progresso parcial é normal - não é 0%
+ * só porque o item ainda não foi finalizado), a iniciar conta como 0%. */
 function percentualPelosItens(rdo: Rdo | undefined): number | null {
   if (!rdo?.avanco_json) return null;
   try {
     const avanco = JSON.parse(rdo.avanco_json) as Record<string, string>;
     const valores = Object.values(avanco);
     if (valores.length === 0) return null;
-    const concluidos = valores.filter((v) => v === "concluido").length;
-    return Math.round((concluidos / valores.length) * 100);
+    const pontos = valores.reduce((soma, v) => {
+      if (v === "concluido") return soma + 100;
+      if (v === "em_andamento") return soma + 50;
+      return soma;
+    }, 0);
+    return Math.round(pontos / valores.length);
   } catch {
     return null;
   }
 }
 
-/** true quando a pessoa digitou um % geral manualmente que não bate com
- * o que os itens do checklist realmente mostram (ex: digitou "100%" mas
- * deixou um item marcado como "Em andamento"). Só compara quando os dois
+/** true quando a pessoa digitou um % geral manualmente que está bem
+ * fora do que os itens do checklist mostram (ex: digitou "100%" mas
+ * vários itens ainda não foram nem iniciados). Só compara quando os dois
  * valores existem de verdade - se só tiver o calculado, não tem o que
- * descasar. Uma margem de 2 pontos evita alarme falso por arredondamento. */
+ * descasar. Margem de 15 pontos: progresso parcial dentro de um item
+ * "em andamento" é normal e não deve soar alarme - só pega diferença
+ * grande o suficiente pra realmente parecer um esquecimento. */
 function temDescompassoDePercentual(rdo: Rdo | undefined): boolean {
   if (!rdo || rdo.avanco_percentual === null || rdo.avanco_percentual === undefined) return false;
   const pelosItens = percentualPelosItens(rdo);
   if (pelosItens === null) return false;
-  return Math.abs(rdo.avanco_percentual - pelosItens) > 2;
+  return Math.abs(rdo.avanco_percentual - pelosItens) > 15;
 }
 
 /** Separa os itens do escopo (FLARE, PROA, HELIDEK...) por status, com
@@ -117,6 +142,70 @@ function itensPorStatusDoRdo(rdo: Rdo | undefined): ItensPorStatus {
   }
 }
 
+/** Quais referências (GM/MD/SS/WO) a pessoa marcou como "trabalhadas hoje"
+ * no RDO mais recente - é isso que deve aparecer em destaque no lugar do
+ * campo fixo de GM, NÃO a lista inteira de referências cadastradas na
+ * obra (essa lista completa fica guardada à parte, como histórico/auditoria,
+ * mas o destaque do card é sempre "o que está rolando agora"). */
+function referenciasDoDia(rdo: Rdo | undefined): ReferenciaDoDia[] {
+  if (!rdo?.referencias_dia_json) return [];
+  try {
+    const lista = JSON.parse(rdo.referencias_dia_json) as ReferenciaDoDia[];
+    if (!Array.isArray(lista)) return [];
+    return lista.filter((r) => r && r.tipo && r.codigo);
+  } catch {
+    return [];
+  }
+}
+
+/** Busca as referências (GM/MD/SS/WO) de uma ou mais obras de uma vez,
+ * já agrupadas por obra_id - pra não precisar de uma query por obra.
+ * Se a tabela ainda não existir no Supabase (projeto não migrado ainda),
+ * não trava a página - só devolve vazio, igual já é feito com anexos. */
+async function buscarReferenciasPorObra(idsObras: number[]): Promise<Map<number, ReferenciaObra[]>> {
+  const mapa = new Map<number, ReferenciaObra[]>();
+  if (idsObras.length === 0) return mapa;
+  const { data, error } = await supabase
+    .from("obra_referencias")
+    .select("*")
+    .in("obra_id", idsObras)
+    .order("tipo", { ascending: true })
+    .order("codigo", { ascending: true });
+  if (error || !data) return mapa;
+  for (const ref of data as ReferenciaObra[]) {
+    const lista = mapa.get(ref.obra_id) || [];
+    lista.push(ref);
+    mapa.set(ref.obra_id, lista);
+  }
+  return mapa;
+}
+
+/** "Hoje" de verdade no fuso de Brasília (AAAA-MM-DD) - NÃO usar
+ * `new Date()` puro pra isso: no servidor (Vercel roda em UTC), depois
+ * das ~21h em Brasília já é "amanhã" em UTC, e qualquer conta de "dias
+ * desde X" fica adiantada em 1 dia bem nesse horário - foi exatamente
+ * esse bug que fez o card mostrar "2 dias a bordo" pra quem embarcou
+ * HOJE mesmo. */
+export function hojeIsoBrasil(): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit",
+  });
+  return formatter.format(new Date()); // en-CA formata como AAAA-MM-DD
+}
+
+/** Só mostra o recado se ele foi escrito HOJE - um aviso de "vento forte"
+ * de 3 dias atrás não deveria continuar aparecendo pro coordenador como
+ * se fosse de hoje. Sem isso, um recado esquecido ficaria sempre visível.
+ * Devolve também a hora (pro coordenador saber se é um aviso fresquinho
+ * ou já de mais cedo no mesmo dia). */
+export function recadoDeHoje(embarque: Embarque): { texto: string; hora: string; data: string } | null {
+  if (!embarque.recado_dia || !embarque.recado_dia_atualizado_em) return null;
+  const dataDoRecado = embarque.recado_dia_atualizado_em.slice(0, 10);
+  if (dataDoRecado !== hojeIsoBrasil()) return null;
+  const hora = embarque.recado_dia_atualizado_em.slice(11, 16) || "-";
+  return { texto: embarque.recado_dia, hora, data: formatarDataBr(dataDoRecado) };
+}
+
 function diasDesde(dataIso: string | null): number | null {
   if (!dataIso) return null;
   // tanto "embarques.data_inicio" (AAAA-MM-DD) quanto "rdos.data"
@@ -124,10 +213,10 @@ function diasDesde(dataIso: string | null): number | null {
   // vêm com os 10 primeiros caracteres em ISO - pega só essa parte,
   // funciona pros dois formatos
   const somenteData = dataIso.slice(0, 10);
-  const inicio = new Date(somenteData + "T00:00:00");
+  const inicio = new Date(somenteData + "T00:00:00Z");
   if (Number.isNaN(inicio.getTime())) return null;
-  const hoje = new Date();
-  const diffMs = hoje.setHours(0, 0, 0, 0) - inicio.setHours(0, 0, 0, 0);
+  const hoje = new Date(hojeIsoBrasil() + "T00:00:00Z");
+  const diffMs = hoje.getTime() - inicio.getTime();
   // +1 pra contar de forma INCLUSIVA (o próprio dia de início já conta como
   // "dia 1 a bordo") - mesma convenção usada no desktop pro "Dias" do
   // histórico de embarques (lá é (mais_recente - mais_antiga).days + 1)
@@ -164,6 +253,14 @@ export type RdoResumo = {
   pdfUrl: string | null;
 };
 
+export type AnexoEmbarque = {
+  id: number;
+  nomeArquivo: string;
+  url: string | null;
+  enviadoPor: string | null;
+  enviadoEm: string | null;
+};
+
 export type LinhaHistorico = {
   embarque: Embarque;
   obra: Obra | null;
@@ -178,6 +275,8 @@ export type LinhaHistorico = {
   percentualPelosItens: number | null;
   justificativa: string | null;
   rdos: RdoResumo[];
+  anexos: AnexoEmbarque[];
+  referencias: ReferenciaObra[];
 };
 
 /** "Dias" do histórico usa só o intervalo real coberto pelos RDOs (do mais
@@ -241,6 +340,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   if (!embarques || embarques.length === 0) return [];
 
   const idsEmbarques = embarques.map((e) => e.id);
+  const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const { data: rdos, error: erroRdos } = await supabase
     .from("rdos")
     .select("*")
@@ -248,6 +348,25 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
     .order("numero_rdo", { ascending: false });
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+
+  const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
+
+  const { data: anexos, error: erroAnexos } = await supabase
+    .from("anexos_embarque")
+    .select("*")
+    .in("embarque_id", idsEmbarques)
+    .order("enviado_em", { ascending: false });
+  // se der erro (ex: tabela ainda não criada no Supabase), não trava o
+  // histórico inteiro por causa disso - só mostra sem os anexos
+  const anexosPorEmbarque = new Map<number, AnexoEmbarque[]>();
+  for (const anexo of erroAnexos ? [] : anexos || []) {
+    const lista = anexosPorEmbarque.get(anexo.embarque_id) || [];
+    lista.push({
+      id: anexo.id, nomeArquivo: anexo.nome_arquivo, url: anexo.url_nuvem,
+      enviadoPor: anexo.enviado_por, enviadoEm: anexo.enviado_em,
+    });
+    anexosPorEmbarque.set(anexo.embarque_id, lista);
+  }
 
   const rdosPorEmbarque = new Map<number, Rdo[]>();
   for (const rdo of rdos || []) {
@@ -276,6 +395,8 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
       rdos: [...listaRdos]
         .sort((a, b) => a.numero_rdo - b.numero_rdo)
         .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
+      anexos: anexosPorEmbarque.get(embarque.id) || [],
+      referencias: referenciasPorObra.get(embarque.obra_id) || [],
     };
   });
 
@@ -306,9 +427,10 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const idsEmbarques = embarques.map((e) => e.id);
 
-  const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }] = await Promise.all([
+  const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }, referenciasPorObra] = await Promise.all([
     supabase.from("obras").select("*").in("id", idsObras),
     supabase.from("rdos").select("*").in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
+    buscarReferenciasPorObra(idsObras),
   ]);
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
@@ -322,6 +444,8 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
     rdosPorEmbarque.set(rdo.embarque_id, lista);
   }
 
+  const hojeIso = hojeIsoBrasil();
+
   return embarques.map((embarque) => {
     const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
     const inicioReal = dataMaisAntiga(embarque.data_inicio, listaRdos);
@@ -330,8 +454,17 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
     // se "dias a bordo" for maior que o número de RDOs lançados, é sinal de
     // que faltou lançar/sincronizar RDO de algum dia (comum offshore, com
     // internet ruim) - o % de avanço mostrado, nesse caso, é só o do último
-    // RDO que chegou, não necessariamente reflete o dia de hoje
-    const rdosPendentes = Math.max(0, (diasEmbarcado ?? 0) - listaRdos.length);
+    // RDO que chegou, não necessariamente reflete o dia de hoje.
+    //
+    // MAS: o dia de HOJE ainda não "fechou" - não é uma pendência de
+    // verdade só porque o RDO de hoje ainda não foi lançado (o dia ainda
+    // está rolando). Por isso, se o RDO mais recente não é de hoje, um
+    // desses dias "faltando" é justamente o de hoje (esperado, não é
+    // atraso) - só conta como pendência de verdade o que sobrar depois
+    // de descontar esse.
+    const gapBruto = Math.max(0, (diasEmbarcado ?? 0) - listaRdos.length);
+    const rdoDeHojeJaChegou = listaRdos.some((r) => (r.data ?? "").slice(0, 10) === hojeIso);
+    const rdosPendentes = rdoDeHojeJaChegou ? gapBruto : Math.max(0, gapBruto - 1);
     const ultimoRdo = listaRdos[0];
     return {
       embarque,
@@ -344,6 +477,8 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
       rdosPendentes,
       percentualDescasado: temDescompassoDePercentual(ultimoRdo),
       percentualPelosItens: percentualPelosItens(ultimoRdo),
+      referencias: referenciasPorObra.get(embarque.obra_id) || [],
+      referenciasHoje: referenciasDoDia(ultimoRdo),
     };
   });
 }
