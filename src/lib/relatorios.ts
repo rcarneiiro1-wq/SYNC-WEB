@@ -67,9 +67,20 @@ function intervaloRealDoEmbarque(embarque: Embarque, rdos: Rdo[]): { inicio: str
   const inicio = datasInicio.length > 0 ? datasInicio.reduce((a, b) => (a < b ? a : b)) : null;
 
   if (!embarque.ativo && embarque.data_fim) {
-    const datasFim = [embarque.data_fim, ...rdos.map((r) => r.data)]
-      .filter((d): d is string => Boolean(d)).map((d) => d.slice(0, 10));
-    const fim = datasFim.length > 0 ? datasFim.reduce((a, b) => (a > b ? a : b)) : (inicio ?? formatarISO(new Date()));
+    // O "fim" real de trabalho é a data do ÚLTIMO RDO lançado, não a
+    // data em que o embarque foi encerrado no sistema - essas duas datas
+    // costumam ser diferentes na prática: a pessoa lança o último RDO
+    // num dia (ex: 26/08), mas só encerra o embarque no sistema um ou
+    // mais dias depois (ex: 27/08, já em terra). Antes, o cálculo pegava
+    // o MÁXIMO entre embarque.data_fim e as datas dos RDOs - isso fazia
+    // o dia do encerramento administrativo contar como um dia de diária
+    // trabalhada mesmo sem nenhum RDO naquele dia, inflando a contagem
+    // (RDOs até 26/08 + encerrado em 27/08 = contava 11 diárias em vez
+    // das 10 realmente trabalhadas).
+    const datasRdo = rdos.map((r) => r.data).filter((d): d is string => Boolean(d)).map((d) => d.slice(0, 10));
+    const fim = datasRdo.length > 0
+      ? datasRdo.reduce((a, b) => (a > b ? a : b))
+      : embarque.data_fim.slice(0, 10); // sem nenhum RDO lançado - usa a data de encerramento mesmo, como reserva
     return { inicio, fim };
   }
   // ainda ativo (ou sem data_fim registrada) - conta até hoje
