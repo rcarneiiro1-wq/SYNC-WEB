@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
@@ -69,9 +70,7 @@ export function Sidebar({
   return (
     <aside className="w-64 shrink-0 bg-navy text-white flex flex-col h-screen sticky top-0">
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-white/10">
-        <div className="w-10 h-10 rounded-full border-2 border-azul flex items-center justify-center text-azul text-lg font-bold shrink-0">
-          S
-        </div>
+        <Image src="/logo-syncerp.png" alt="Sync ERP" width={40} height={40} className="shrink-0" priority />
         <div className="min-w-0">
           <p className="font-bold leading-tight truncate">Sync ERP</p>
           <p className="text-azul text-[11px] font-semibold tracking-wide truncate">MF MÁQUINAS</p>

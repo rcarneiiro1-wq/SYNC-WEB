@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { cookies } from "next/headers";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { FileText, Ship, Award } from "lucide-react";
@@ -54,9 +55,7 @@ export default async function PaginaInicial() {
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-14 flex flex-col items-center">
-      <div className="w-16 h-16 rounded-full border-2 border-azul flex items-center justify-center text-azul text-2xl font-bold mb-4">
-        S
-      </div>
+      <Image src="/logo-syncerp.png" alt="Sync ERP" width={64} height={64} className="mb-4" priority />
       <h1 className="text-2xl font-bold text-navy">Sync ERP</h1>
       <p className="text-azul text-sm font-semibold mb-1">MF Máquinas</p>
       <p className="text-gray-500 text-sm mb-10">

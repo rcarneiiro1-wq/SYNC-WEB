@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { entrar } from "./actions";
 
 export default async function PaginaLogin({
@@ -14,9 +15,7 @@ export default async function PaginaLogin({
     <div className="min-h-screen flex items-center justify-center bg-navy px-4">
       <div className="w-full max-w-sm bg-white rounded-lg shadow-xl overflow-hidden">
         <div className="bg-navy px-8 pt-10 pb-8 flex flex-col items-center">
-          <div className="w-14 h-14 rounded-full border-2 border-azul flex items-center justify-center text-azul text-2xl font-bold">
-            S
-          </div>
+          <Image src="/logo-syncerp.png" alt="Sync ERP" width={56} height={56} priority />
           <h1 className="mt-4 text-white text-xl font-bold">Sync ERP</h1>
           <p className="text-azul text-xs font-semibold tracking-wide mt-0.5">
             GERENCIAMENTO DE EMBARQUE
