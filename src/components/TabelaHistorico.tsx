@@ -328,7 +328,10 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     const media = validos.length > 0
       ? Math.round(validos.reduce((soma, l) => soma + (l.percentualFinal || 0), 0) / validos.length)
       : null;
-    return { total, comPendencia, media };
+    // soma os "dias" (intervalo real coberto pelos RDOs) de cada embarque
+    // filtrado - equivale ao total de diárias no período/filtro atual
+    const totalDias = linhas.reduce((soma, l) => soma + (l.dias ?? 0), 0);
+    return { total, comPendencia, media, totalDias };
   }, [linhas]);
 
   let contadorLinha = 0;
@@ -352,7 +355,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
 
   return (
     <div>
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
           <p className="text-2xl font-bold text-navy">{resumo.total}</p>
           <p className="text-xs text-gray-400">embarque{resumo.total === 1 ? "" : "s"} encontrado{resumo.total === 1 ? "" : "s"}</p>
@@ -360,6 +363,10 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
           <p className={`text-2xl font-bold ${resumo.comPendencia > 0 ? "text-amarelo" : "text-navy"}`}>{resumo.comPendencia}</p>
           <p className="text-xs text-gray-400">com pendência</p>
+        </div>
+        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
+          <p className="text-2xl font-bold text-navy">{resumo.totalDias}</p>
+          <p className="text-xs text-gray-400">diária{resumo.totalDias === 1 ? "" : "s"} no período</p>
         </div>
         <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
           <p className="text-2xl font-bold text-navy">{resumo.media !== null ? `${resumo.media}%` : "-"}</p>
