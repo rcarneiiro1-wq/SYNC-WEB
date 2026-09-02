@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type ReferenciaObra, type RdoResumo } from "@/lib/embarques";
+import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type Obra, type ReferenciaObra, type RdoResumo } from "@/lib/embarques";
+import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
+import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
 
 function corPercentual(percentual: number | null): string {
   if (percentual === null) return "bg-gray-200 text-gray-500";
@@ -38,14 +40,33 @@ function ChipReferencia({ referencia }: { referencia: ReferenciaObra }) {
 /** Modal do botão "Ver RDOs" - mesmos 3 cartõezinhos de estatística que o
  * desktop mostra (Total de RDOs / Progresso atual / última data lançada),
  * seguidos da lista de RDOs com link de PDF quando tiver. */
-function ModalRdos({ nome, rdos, percentual, aoFechar }: {
-  nome: string; rdos: RdoResumo[]; percentual: number | null; aoFechar: () => void;
+function ModalRdos({ nome, rdos, percentual, obra, aoFechar }: {
+  nome: string; rdos: RdoResumo[]; percentual: number | null; obra: Obra | null; aoFechar: () => void;
 }) {
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
+  const [erroZip, setErroZip] = useState<string | null>(null);
+
   const ultimaData = rdos.reduce<string | null>((maior, r) => {
     if (!r.data) return maior;
     if (!maior || r.data > maior) return r.data;
     return maior;
   }, null);
+
+  const rdosComPdf = rdos.filter((r) => r.pdfUrl);
+
+  const aoClicarBaixarTodos = async () => {
+    setBaixandoTodos(true);
+    setErroZip(null);
+    const erro = await baixarTodosComoZip(
+      rdosComPdf.map((r) => ({
+        url: r.pdfUrl as string,
+        nome: montarNomeArquivoRdo(r.numeroRdo, obra?.empresa, obra?.local_codigo, r.data, nome),
+      })),
+      `RDOs - ${nome}.zip`
+    );
+    setErroZip(erro);
+    setBaixandoTodos(false);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={aoFechar}>
@@ -78,6 +99,20 @@ function ModalRdos({ nome, rdos, percentual, aoFechar }: {
           </div>
         </div>
 
+        <div className="px-5 pt-4">
+          {rdosComPdf.length > 1 && (
+            <button
+              type="button"
+              onClick={aoClicarBaixarTodos}
+              disabled={baixandoTodos}
+              className="w-full text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+            >
+              {baixandoTodos ? "Gerando .zip..." : `⬇ Baixar todos os RDOs (${rdosComPdf.length}) em .zip`}
+            </button>
+          )}
+          {erroZip && <p className="text-xs text-vermelho mt-2">{erroZip}</p>}
+        </div>
+
         <div className="px-5 py-4">
           {rdos.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">Nenhum RDO lançado ainda.</p>
@@ -93,9 +128,10 @@ function ModalRdos({ nome, rdos, percentual, aoFechar }: {
                   </div>
                   {rdo.pdfUrl ? (
                     <a
-                      href={rdo.pdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      href={urlDownloadArquivo(
+                        rdo.pdfUrl,
+                        montarNomeArquivoRdo(rdo.numeroRdo, obra?.empresa, obra?.local_codigo, rdo.data, nome)
+                      )}
                       className="text-xs font-semibold text-azul hover:underline whitespace-nowrap"
                     >
                       ⬇ Baixar PDF
@@ -343,6 +379,7 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           nome={embarque.efetivo_nome || "-"}
           rdos={rdos}
           percentual={percentual}
+          obra={obra}
           aoFechar={() => setRdosAbertos(false)}
         />
       )}

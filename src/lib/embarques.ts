@@ -375,14 +375,24 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 
   const idsEmbarques = embarques.map((e) => e.id);
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
-  const { data: rdosRaw, error: erroRdos } = await supabase
-    .from("rdos")
-    .select(COLUNAS_RDOS)
-    .in("embarque_id", idsEmbarques)
-    .order("numero_rdo", { ascending: false });
+  const [{ data: rdosRaw, error: erroRdos }, { data: obrasRaw, error: erroObras }] = await Promise.all([
+    supabase
+      .from("rdos")
+      .select(COLUNAS_RDOS)
+      .in("embarque_id", idsEmbarques)
+      .order("numero_rdo", { ascending: false }),
+    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+  ]);
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   const rdos = rdosRaw as unknown as Rdo[];
+  // precisa da obra mesmo no histórico (embarque já encerrado) - não pra
+  // mostrar "previsão de desembarque" (não faz sentido pra quem já
+  // desembarcou), mas porque "empresa" e "código da plataforma" entram no
+  // nome padronizado do arquivo do RDO na hora de baixar (ver nomeArquivo.ts)
+  const obras = obrasRaw as unknown as Obra[];
+  const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
 
   const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
 
@@ -424,7 +434,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
     const ultimoRdo = listaRdos[0];
     return {
       embarque,
-      obra: null, // histórico não precisa da obra (empresa/previsão não fazem sentido pra um embarque já encerrado)
+      obra: obrasPorId.get(embarque.obra_id) || null,
       totalRdos: listaRdos.length,
       percentualFinal: percentualDoRdo(ultimoRdo),
       dias,

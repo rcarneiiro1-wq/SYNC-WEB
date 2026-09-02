@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { formatarDataBr, type LinhaHistorico, type ItensPorStatus } from "@/lib/embarques";
+import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
+import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
 
 function corPercentualBadge(percentual: number | null): string {
   if (percentual === null) return "bg-gray-100 text-gray-400";
@@ -31,8 +33,28 @@ function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
 }
 
 function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
-  const { embarque, itensAvanco, justificativa, rdos, referencias } = linha;
+  const { embarque, obra, itensAvanco, justificativa, rdos, referencias } = linha;
   const justificativaEncerramento = embarque.justificativa_encerramento;
+  const nomeColaborador = embarque.efetivo_nome || "-";
+  const rdosComPdf = rdos.filter((r) => r.pdfUrl);
+
+  const [baixandoTodos, setBaixandoTodos] = useState(false);
+  const [erroZip, setErroZip] = useState<string | null>(null);
+
+  const aoClicarBaixarTodos = async () => {
+    setBaixandoTodos(true);
+    setErroZip(null);
+    const erro = await baixarTodosComoZip(
+      rdosComPdf.map((r) => ({
+        url: r.pdfUrl as string,
+        nome: montarNomeArquivoRdo(r.numeroRdo, obra?.empresa, obra?.local_codigo, r.data, nomeColaborador),
+      })),
+      `RDOs - ${nomeColaborador}.zip`
+    );
+    setErroZip(erro);
+    setBaixandoTodos(false);
+  };
+
   return (
     <tr>
       <td colSpan={6} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
@@ -93,9 +115,22 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              RDOs lançados ({rdos.length})
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                RDOs lançados ({rdos.length})
+              </p>
+              {rdosComPdf.length > 1 && (
+                <button
+                  type="button"
+                  onClick={aoClicarBaixarTodos}
+                  disabled={baixandoTodos}
+                  className="text-xs font-semibold text-azul hover:underline whitespace-nowrap disabled:opacity-60 disabled:cursor-wait cursor-pointer"
+                >
+                  {baixandoTodos ? "Gerando .zip..." : `⬇ Baixar todos (${rdosComPdf.length}) em .zip`}
+                </button>
+              )}
+            </div>
+            {erroZip && <p className="text-xs text-vermelho mb-2">{erroZip}</p>}
             {rdos.length === 0 ? (
               <p className="text-xs text-gray-400">Nenhum RDO lançado.</p>
             ) : (
@@ -107,9 +142,10 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
                     </span>
                     {rdo.pdfUrl ? (
                       <a
-                        href={rdo.pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        href={urlDownloadArquivo(
+                          rdo.pdfUrl,
+                          montarNomeArquivoRdo(rdo.numeroRdo, obra?.empresa, obra?.local_codigo, rdo.data, nomeColaborador)
+                        )}
                         className="text-azul font-medium hover:underline whitespace-nowrap"
                       >
                         📥 Baixar PDF
@@ -135,9 +171,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
               {linha.anexos.map((anexo) => (
                 <a
                   key={anexo.id}
-                  href={anexo.url ?? undefined}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={anexo.url ? urlDownloadArquivo(anexo.url, anexo.nomeArquivo) : undefined}
                   className={`flex items-center gap-2 text-sm bg-white rounded px-3 py-1.5 border ${
                     anexo.url ? "border-gray-100 hover:border-azul" : "border-gray-100 pointer-events-none opacity-60"
                   }`}
@@ -145,7 +179,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
                 >
                   <span className="text-gray-600">{anexo.nomeArquivo}</span>
                   {anexo.url ? (
-                    <span className="text-azul font-medium whitespace-nowrap">Abrir ↗</span>
+                    <span className="text-azul font-medium whitespace-nowrap">⬇ Baixar</span>
                   ) : (
                     <span className="text-gray-300 text-xs whitespace-nowrap">enviando...</span>
                   )}
@@ -400,8 +434,8 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
       )}
 
       <p className="text-xs text-gray-400 mt-4">
-        Clica numa linha pra ver os itens completos, a justificativa (se tiver) e baixar os PDFs dos RDOs. "Período"
-        e "Duração" são calculados pelo intervalo real coberto pelos RDOs lançados.
+        Clica numa linha pra ver os itens completos, a justificativa (se tiver) e baixar os PDFs dos RDOs. &quot;Período&quot;
+        e &quot;Duração&quot; são calculados pelo intervalo real coberto pelos RDOs lançados.
       </p>
     </div>
   );
