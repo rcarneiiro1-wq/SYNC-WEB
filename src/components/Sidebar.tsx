@@ -19,6 +19,8 @@ import {
   Info,
   X,
   ShieldAlert,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -47,6 +49,38 @@ function iniciaisDoNome(nome: string): string {
   const partes = nome.trim().split(/\s+/);
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+/** Uma seção da lateral que expande/recolhe ao clicar no título - em vez
+ * de tudo despejado achatado (era o motivo da lateral estar "bagunçada",
+ * com os itens "em breve" sempre ocupando espaço mesmo sem servir pra
+ * nada ainda). `abertoPorPadrao` decide o estado inicial - a seção que a
+ * pessoa usa de verdade (Gerenciamento de embarque) começa aberta, a que
+ * ainda não tem nada clicável (Em construção) começa fechada. */
+function GrupoMenu({
+  titulo,
+  abertoPorPadrao,
+  children,
+}: {
+  titulo: string;
+  abertoPorPadrao: boolean;
+  children: React.ReactNode;
+}) {
+  const [aberto, setAberto] = useState(abertoPorPadrao);
+  const Seta = aberto ? ChevronDown : ChevronRight;
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-bold tracking-wide text-gray-500 uppercase cursor-pointer hover:text-gray-300 transition-colors"
+      >
+        <span>{titulo}</span>
+        <Seta size={13} className="shrink-0" />
+      </button>
+      {aberto && <div className="flex flex-col gap-0.5 mt-0.5">{children}</div>}
+    </div>
+  );
 }
 
 function ModalSobre({ aoFechar }: { aoFechar: () => void }) {
@@ -111,46 +145,44 @@ export function Sidebar({
           <span>Início</span>
         </Link>
 
-        <p className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">
-          Gerenciamento de embarque
-        </p>
-        {ITENS_EMBARQUE.map((item) => {
-          const Icone = item.icone;
-          const ativo = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Icone size={18} className="shrink-0" />
-              <span>{item.rotulo}</span>
-            </Link>
-          );
-        })}
+        <GrupoMenu titulo="Gerenciamento de embarque" abertoPorPadrao>
+          {ITENS_EMBARQUE.map((item) => {
+            const Icone = item.icone;
+            const ativo = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                <Icone size={18} className="shrink-0" />
+                <span>{item.rotulo}</span>
+              </Link>
+            );
+          })}
+        </GrupoMenu>
 
-        {ITENS_EM_BREVE.map((item) => {
-          const Icone = item.icone;
-          return (
-            <div
-              key={item.rotulo}
-              title="Em breve nessa área"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-500 cursor-not-allowed select-none"
-            >
-              <Icone size={18} className="shrink-0" />
-              <span className="flex-1">{item.rotulo}</span>
-              <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded">em breve</span>
-            </div>
-          );
-        })}
+        <GrupoMenu titulo="Em construção" abertoPorPadrao={false}>
+          {ITENS_EM_BREVE.map((item) => {
+            const Icone = item.icone;
+            return (
+              <div
+                key={item.rotulo}
+                title="Em breve nessa área"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-500 cursor-not-allowed select-none"
+              >
+                <Icone size={18} className="shrink-0" />
+                <span className="flex-1">{item.rotulo}</span>
+                <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded">em breve</span>
+              </div>
+            );
+          })}
+        </GrupoMenu>
 
         {ehAdmin && (
-          <>
-            <p className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">
-              Administração
-            </p>
+          <GrupoMenu titulo="Administração" abertoPorPadrao>
             <Link
               href="/admin"
               className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -160,7 +192,7 @@ export function Sidebar({
               <ShieldAlert size={18} className="shrink-0" />
               <span>Painel admin</span>
             </Link>
-          </>
+          </GrupoMenu>
         )}
       </nav>
 
