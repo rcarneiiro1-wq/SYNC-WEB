@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { formatarDataBr, type LinhaHistorico, type ItensPorStatus } from "@/lib/embarques";
 import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
 import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
+import { SecaoAnexos } from "@/components/SecaoAnexos";
 
 function corPercentualBadge(percentual: number | null): string {
   if (percentual === null) return "bg-gray-100 text-gray-400";
@@ -161,32 +162,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            📎 Relatórios assinados ({linha.anexos.length})
-          </p>
-          {linha.anexos.length === 0 ? (
-            <p className="text-xs text-gray-400">Nenhum relatório assinado anexado ainda.</p>
-          ) : (
-            <div className="flex flex-wrap gap-2">
-              {linha.anexos.map((anexo) => (
-                <a
-                  key={anexo.id}
-                  href={anexo.url ? urlDownloadArquivo(anexo.url, anexo.nomeArquivo) : undefined}
-                  className={`flex items-center gap-2 text-sm bg-white rounded px-3 py-1.5 border ${
-                    anexo.url ? "border-gray-100 hover:border-azul" : "border-gray-100 pointer-events-none opacity-60"
-                  }`}
-                  title={anexo.enviadoPor ? `Anexado por ${anexo.enviadoPor}` : undefined}
-                >
-                  <span className="text-gray-600">{anexo.nomeArquivo}</span>
-                  {anexo.url ? (
-                    <span className="text-azul font-medium whitespace-nowrap">⬇ Baixar</span>
-                  ) : (
-                    <span className="text-gray-300 text-xs whitespace-nowrap">enviando...</span>
-                  )}
-                </a>
-              ))}
-            </div>
-          )}
+          <SecaoAnexos embarqueId={embarque.id} anexos={linha.anexos} />
         </div>
       </td>
     </tr>

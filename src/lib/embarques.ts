@@ -65,6 +65,7 @@ export type Rdo = {
   arquivo_pdf_url: string | null;
   justificativa_percentual: string | null;
   referencias_dia_json: string | null;
+  atualizado_em: string | null;
 };
 
 export type ItensPorStatus = {
@@ -91,6 +92,11 @@ export type LinhaEmbarque = {
   // lista dos RDOs desse embarque (mais recente primeiro) - usado no botão
   // "Ver RDOs" do card (igual o desktop tem), não precisa buscar de novo
   rdos: RdoResumo[];
+  // relatórios/RDOs assinados anexados a esse embarque - igual já existia
+  // no histórico, agora também disponível pro embarque ainda ATIVO (pra dar
+  // pra anexar o relatório de embarque assim que ele terminar de ser feito,
+  // sem precisar esperar o embarque ser encerrado no sistema)
+  anexos: AnexoEmbarque[];
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -198,6 +204,40 @@ async function buscarReferenciasPorObra(idsObras: string[]): Promise<Map<string,
   return mapa;
 }
 
+/** Busca os anexos (relatórios/RDOs assinados) de uma ou mais embarques de
+ * uma vez, já agrupados por embarque_id - usado tanto nos embarques ATIVOS
+ * quanto no histórico (o anexo pode ser subido em qualquer momento, o
+ * embarque não precisa já estar encerrado). Se a tabela ainda não existir
+ * no Supabase (projeto não migrado ainda), não trava a tela - só devolve
+ * vazio. */
+async function buscarAnexosPorEmbarque(idsEmbarques: string[]): Promise<Map<string, AnexoEmbarque[]>> {
+  const mapa = new Map<string, AnexoEmbarque[]>();
+  if (idsEmbarques.length === 0) return mapa;
+  const { data, error } = await supabase
+    .from("anexos_embarque")
+    .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
+    .in("embarque_id", idsEmbarques)
+    .order("enviado_em", { ascending: false });
+  if (error || !data) return mapa;
+  const anexos = data as unknown as {
+    id: string;
+    embarque_id: string;
+    nome_arquivo: string;
+    url_nuvem: string | null;
+    enviado_por: string | null;
+    enviado_em: string | null;
+  }[];
+  for (const anexo of anexos) {
+    const lista = mapa.get(anexo.embarque_id) || [];
+    lista.push({
+      id: anexo.id, nomeArquivo: anexo.nome_arquivo, url: anexo.url_nuvem,
+      enviadoPor: anexo.enviado_por, enviadoEm: anexo.enviado_em,
+    });
+    mapa.set(anexo.embarque_id, lista);
+  }
+  return mapa;
+}
+
 /** "Hoje" de verdade no fuso de Brasília (AAAA-MM-DD) - NÃO usar
  * `new Date()` puro pra isso: no servidor (Vercel roda em UTC), depois
  * das ~21h em Brasília já é "amanhã" em UTC, e qualquer conta de "dias
@@ -269,7 +309,23 @@ export type RdoResumo = {
   numeroRdo: number;
   data: string | null;
   pdfUrl: string | null;
+  percentual: number | null;
+  atualizadoEm: string | null;
 };
+
+/** Monta o resumo de UM RDO (usado tanto nos embarques ativos quanto no
+ * histórico) - centraliza aqui pra não duplicar a lógica de % em cada
+ * lugar que monta a lista de RDOs pro "Ver RDOs". */
+function resumoDoRdo(rdo: Rdo): RdoResumo {
+  return {
+    id: rdo.id,
+    numeroRdo: rdo.numero_rdo,
+    data: rdo.data,
+    pdfUrl: rdo.arquivo_pdf_url,
+    percentual: percentualDoRdo(rdo),
+    atualizadoEm: rdo.atualizado_em,
+  };
+}
 
 export type AnexoEmbarque = {
   id: string;
@@ -394,32 +450,10 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   const obras = obrasRaw as unknown as Obra[];
   const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
 
-  const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
-
-  const { data: anexosRaw, error: erroAnexos } = await supabase
-    .from("anexos_embarque")
-    .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
-    .in("embarque_id", idsEmbarques)
-    .order("enviado_em", { ascending: false });
-  // se der erro (ex: tabela ainda não criada no Supabase), não trava o
-  // histórico inteiro por causa disso - só mostra sem os anexos
-  const anexos = anexosRaw as unknown as {
-    id: string;
-    embarque_id: string;
-    nome_arquivo: string;
-    url_nuvem: string | null;
-    enviado_por: string | null;
-    enviado_em: string | null;
-  }[];
-  const anexosPorEmbarque = new Map<string, AnexoEmbarque[]>();
-  for (const anexo of erroAnexos ? [] : anexos || []) {
-    const lista = anexosPorEmbarque.get(anexo.embarque_id) || [];
-    lista.push({
-      id: anexo.id, nomeArquivo: anexo.nome_arquivo, url: anexo.url_nuvem,
-      enviadoPor: anexo.enviado_por, enviadoEm: anexo.enviado_em,
-    });
-    anexosPorEmbarque.set(anexo.embarque_id, lista);
-  }
+  const [referenciasPorObra, anexosPorEmbarque] = await Promise.all([
+    buscarReferenciasPorObra(idsObras),
+    buscarAnexosPorEmbarque(idsEmbarques),
+  ]);
 
   const rdosPorEmbarque = new Map<string, Rdo[]>();
   for (const rdo of rdos || []) {
@@ -445,9 +479,7 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
       percentualDescasado: temDescompassoDePercentual(ultimoRdo),
       percentualPelosItens: percentualPelosItens(ultimoRdo),
       justificativa: ultimoRdo?.justificativa_percentual ?? null,
-      rdos: [...listaRdos]
-        .sort((a, b) => a.numero_rdo - b.numero_rdo)
-        .map((r) => ({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url })),
+      rdos: [...listaRdos].sort((a, b) => a.numero_rdo - b.numero_rdo).map(resumoDoRdo),
       anexos: anexosPorEmbarque.get(embarque.id) || [],
       referencias: referenciasPorObra.get(embarque.obra_id) || [],
     };
@@ -481,11 +513,13 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const idsEmbarques = embarques.map((e) => e.id);
 
-  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }, referenciasPorObra] = await Promise.all([
-    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
-    supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
-    buscarReferenciasPorObra(idsObras),
-  ]);
+  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }, referenciasPorObra, anexosPorEmbarque] =
+    await Promise.all([
+      supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+      supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
+      buscarReferenciasPorObra(idsObras),
+      buscarAnexosPorEmbarque(idsEmbarques),
+    ]);
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
@@ -537,9 +571,8 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
       referenciasHoje: referenciasDoDia(ultimoRdo),
       // já vem ordenado do mais recente pro mais antigo (mesma query
       // acima, "numero_rdo" descendente)
-      rdos: listaRdos.map((r) => ({
-        id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url,
-      })),
+      rdos: listaRdos.map(resumoDoRdo),
+      anexos: anexosPorEmbarque.get(embarque.id) || [],
     };
   });
 }

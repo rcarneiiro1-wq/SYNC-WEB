@@ -2,9 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type Obra, type ReferenciaObra, type RdoResumo } from "@/lib/embarques";
+import {
+  formatarDataBr, recadoDeHoje,
+  type AnexoEmbarque, type LinhaEmbarque, type Obra, type ReferenciaObra, type RdoResumo,
+} from "@/lib/embarques";
+import { tempoRelativo } from "@/lib/tempo";
 import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
 import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
+import { SecaoAnexos } from "@/components/SecaoAnexos";
 
 function corPercentual(percentual: number | null): string {
   if (percentual === null) return "bg-gray-200 text-gray-500";
@@ -37,47 +42,77 @@ function ChipReferencia({ referencia }: { referencia: ReferenciaObra }) {
   );
 }
 
-/** Modal do botão "Ver RDOs" - mesmos 3 cartõezinhos de estatística que o
- * desktop mostra (Total de RDOs / Progresso atual / última data lançada),
- * seguidos da lista de RDOs com link de PDF quando tiver. */
-function ModalRdos({ nome, rdos, percentual, obra, aoFechar }: {
-  nome: string; rdos: RdoResumo[]; percentual: number | null; obra: Obra | null; aoFechar: () => void;
+/** Modal do botão "Ver RDOs" - no nível da janela "Histórico de RDOs" do
+ * desktop: 3 cartõezinhos de estatística (Total de RDOs / Progresso total /
+ * Última atualização), tabela de RDOs com seleção (checkbox + Selecionar
+ * todos), Abrir/Baixar selecionado(s), e a seção de Relatórios assinados
+ * (upload do relatório de embarque + anexos já enviados). */
+function ModalRdos({ embarqueId, nome, rdos, anexos, percentual, obra, aoFechar }: {
+  embarqueId: string; nome: string; rdos: RdoResumo[]; anexos: AnexoEmbarque[];
+  percentual: number | null; obra: Obra | null; aoFechar: () => void;
 }) {
-  const [baixandoTodos, setBaixandoTodos] = useState(false);
-  const [erroZip, setErroZip] = useState<string | null>(null);
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [baixando, setBaixando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
-  const ultimaData = rdos.reduce<string | null>((maior, r) => {
-    if (!r.data) return maior;
-    if (!maior || r.data > maior) return r.data;
+  const ultimaAtualizacao = rdos.reduce<string | null>((maior, r) => {
+    if (!r.atualizadoEm) return maior;
+    if (!maior || r.atualizadoEm > maior) return r.atualizadoEm;
     return maior;
   }, null);
 
-  const rdosComPdf = rdos.filter((r) => r.pdfUrl);
+  const nomeArquivoDoRdo = (rdo: RdoResumo) =>
+    montarNomeArquivoRdo(rdo.numeroRdo, obra?.empresa, obra?.local_codigo, rdo.data, nome);
 
-  const aoClicarBaixarTodos = async () => {
-    setBaixandoTodos(true);
-    setErroZip(null);
-    const erro = await baixarTodosComoZip(
-      rdosComPdf.map((r) => ({
-        url: r.pdfUrl as string,
-        nome: montarNomeArquivoRdo(r.numeroRdo, obra?.empresa, obra?.local_codigo, r.data, nome),
-      })),
+  const alternarSelecao = (id: string) => {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  };
+
+  const selecionarTodos = () => {
+    setSelecionados((atual) => (atual.size === rdos.length ? new Set() : new Set(rdos.map((r) => r.id))));
+  };
+
+  const rdosSelecionadosComPdf = rdos.filter((r) => selecionados.has(r.id) && r.pdfUrl);
+
+  const abrirSelecionados = () => {
+    for (const rdo of rdosSelecionadosComPdf) {
+      window.open(rdo.pdfUrl as string, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const baixarSelecionados = async () => {
+    if (rdosSelecionadosComPdf.length === 0) return;
+    setBaixando(true);
+    setErro(null);
+    if (rdosSelecionadosComPdf.length === 1) {
+      const rdo = rdosSelecionadosComPdf[0];
+      window.location.href = urlDownloadArquivo(rdo.pdfUrl as string, nomeArquivoDoRdo(rdo));
+      setBaixando(false);
+      return;
+    }
+    const erroZip = await baixarTodosComoZip(
+      rdosSelecionadosComPdf.map((r) => ({ url: r.pdfUrl as string, nome: nomeArquivoDoRdo(r) })),
       `RDOs - ${nome}.zip`
     );
-    setErroZip(erro);
-    setBaixandoTodos(false);
+    setErro(erroZip);
+    setBaixando(false);
   };
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={aoFechar}>
       <div
-        className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="bg-navy text-white px-5 py-4 flex items-start justify-between rounded-t-lg">
           <div>
-            <p className="font-bold">{nome}</p>
-            <p className="text-xs text-azul">RDOs lançados neste embarque</p>
+            <p className="font-bold">Histórico de RDOs — {nome}</p>
+            <p className="text-xs text-azul">Confira todos os RDOs lançados para este embarque.</p>
           </div>
           <button type="button" onClick={aoFechar} className="text-white/70 hover:text-white cursor-pointer">
             ✕
@@ -91,58 +126,94 @@ function ModalRdos({ nome, rdos, percentual, obra, aoFechar }: {
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2 text-center">
             <p className="text-lg font-bold text-navy">{percentual !== null ? `${percentual}%` : "-"}</p>
-            <p className="text-[10px] text-gray-500">Progresso atual</p>
+            <p className="text-[10px] text-gray-500">Progresso total</p>
           </div>
           <div className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2 text-center">
-            <p className="text-sm font-bold text-navy pt-1">{formatarDataBr(ultimaData)}</p>
-            <p className="text-[10px] text-gray-500">Último RDO</p>
+            <p className="text-xs font-bold text-navy pt-1.5 leading-tight">{tempoRelativo(ultimaAtualizacao)}</p>
+            <p className="text-[10px] text-gray-500">Última atualização</p>
           </div>
-        </div>
-
-        <div className="px-5 pt-4">
-          {rdosComPdf.length > 1 && (
-            <button
-              type="button"
-              onClick={aoClicarBaixarTodos}
-              disabled={baixandoTodos}
-              className="w-full text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-            >
-              {baixandoTodos ? "Gerando .zip..." : `⬇ Baixar todos os RDOs (${rdosComPdf.length}) em .zip`}
-            </button>
-          )}
-          {erroZip && <p className="text-xs text-vermelho mt-2">{erroZip}</p>}
         </div>
 
         <div className="px-5 py-4">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            RDOs sincronizados
+          </p>
           {rdos.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-6">Nenhum RDO lançado ainda.</p>
           ) : (
-            <div className="flex flex-col divide-y divide-gray-100">
-              {rdos.map((rdo) => (
-                <div key={rdo.id} className="flex items-center justify-between py-2.5">
-                  <div>
-                    <p className="text-sm font-semibold text-navy">
-                      RDO {String(rdo.numeroRdo).padStart(3, "0")}
-                    </p>
-                    <p className="text-xs text-gray-400">{formatarDataBr(rdo.data)}</p>
-                  </div>
-                  {rdo.pdfUrl ? (
-                    <a
-                      href={urlDownloadArquivo(
-                        rdo.pdfUrl,
-                        montarNomeArquivoRdo(rdo.numeroRdo, obra?.empresa, obra?.local_codigo, rdo.data, nome)
-                      )}
-                      className="text-xs font-semibold text-azul hover:underline whitespace-nowrap"
+            <div className="border border-gray-100 rounded-md overflow-hidden mb-2">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="w-8 py-2 pl-3"></th>
+                    <th className="py-2 px-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Número</th>
+                    <th className="py-2 px-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Data</th>
+                    <th className="py-2 px-2 text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wide">% Avanço</th>
+                    <th className="py-2 px-2 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Última atualização</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {rdos.map((rdo) => (
+                    <tr
+                      key={rdo.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => alternarSelecao(rdo.id)}
                     >
-                      ⬇ Baixar PDF
-                    </a>
-                  ) : (
-                    <span className="text-xs text-gray-300 whitespace-nowrap">Sem PDF</span>
-                  )}
-                </div>
-              ))}
+                      <td className="pl-3 py-2">
+                        <input
+                          type="checkbox"
+                          className="accent-azul"
+                          checked={selecionados.has(rdo.id)}
+                          onChange={() => alternarSelecao(rdo.id)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </td>
+                      <td className="py-2 px-2 font-semibold text-navy">{String(rdo.numeroRdo).padStart(3, "0")}</td>
+                      <td className="py-2 px-2 text-gray-600 whitespace-nowrap">{formatarDataBr(rdo.data)}</td>
+                      <td className="py-2 px-2 text-center text-gray-600">{rdo.percentual !== null ? `${rdo.percentual}%` : "-"}</td>
+                      <td className="py-2 px-2 text-gray-400 text-xs whitespace-nowrap">{tempoRelativo(rdo.atualizadoEm)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+
+          {erro && <p className="text-xs text-vermelho mb-2">{erro}</p>}
+
+          {rdos.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={selecionarTodos}
+                className="text-xs font-medium text-azul hover:underline cursor-pointer whitespace-nowrap"
+              >
+                {selecionados.size === rdos.length ? "Desmarcar todos" : "Selecionar todos"}
+              </button>
+              <button
+                type="button"
+                onClick={abrirSelecionados}
+                disabled={rdosSelecionadosComPdf.length === 0}
+                className="text-xs font-medium text-azul hover:underline cursor-pointer whitespace-nowrap disabled:opacity-40 disabled:no-underline disabled:cursor-default"
+              >
+                👁 Abrir selecionado(s)
+              </button>
+              <button
+                type="button"
+                onClick={baixarSelecionados}
+                disabled={rdosSelecionadosComPdf.length === 0 || baixando}
+                className="text-xs font-medium text-azul hover:underline cursor-pointer whitespace-nowrap disabled:opacity-40 disabled:no-underline disabled:cursor-default"
+              >
+                {baixando ? "Baixando..." : "⬇ Baixar selecionado(s) pra uma pasta"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 pb-5 pt-1 border-t border-gray-100">
+          <div className="pt-4">
+            <SecaoAnexos embarqueId={embarqueId} anexos={anexos} />
+          </div>
         </div>
       </div>
     </div>
@@ -154,7 +225,7 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
   const [rdosAbertos, setRdosAbertos] = useState(false);
   const {
     embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes,
-    percentualDescasado, percentualPelosItens, referencias, referenciasHoje, rdos,
+    percentualDescasado, percentualPelosItens, referencias, referenciasHoje, rdos, anexos,
   } = linha;
   const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
   const temPendencia = rdosPendentes > 0;
@@ -361,9 +432,17 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
         <button
           type="button"
           onClick={() => setRdosAbertos(true)}
-          className="flex-1 text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2 cursor-pointer"
+          className="flex-1 text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2 cursor-pointer relative"
         >
           📂 Ver RDOs
+          {anexos.length > 0 && (
+            <span
+              className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold bg-white/20 px-1.5 py-0.5 rounded-full"
+              title={`${anexos.length} relatório(s) assinado(s) anexado(s)`}
+            >
+              📎 {anexos.length}
+            </span>
+          )}
         </button>
         <Link
           href={`/relatorios/avanco?ids=${embarque.id}`}
@@ -376,8 +455,10 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
 
       {rdosAbertos && (
         <ModalRdos
+          embarqueId={embarque.id}
           nome={embarque.efetivo_nome || "-"}
           rdos={rdos}
+          anexos={anexos}
           percentual={percentual}
           obra={obra}
           aoFechar={() => setRdosAbertos(false)}
