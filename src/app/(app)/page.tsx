@@ -29,7 +29,7 @@ const CARTOES: Cartao[] = [
     icone: FileText,
     corIcone: "#c07a12",
     corFundoIcone: "#FBF0DF",
-    href: "/relatorios",
+    notaSeDesabilitado: "Em construção",
   },
   {
     titulo: "Gerenciamento de Certificados",
