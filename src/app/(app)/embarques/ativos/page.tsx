@@ -1,5 +1,6 @@
 import { buscarEmbarquesAtivos } from "@/lib/embarques";
 import { CartaoEmbarque } from "@/components/CartaoEmbarque";
+import { BotaoAtualizar } from "@/components/BotaoAtualizar";
 import type { LinhaEmbarque } from "@/lib/embarques";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
@@ -14,15 +15,30 @@ export default async function PaginaEmbarques() {
     erro = e instanceof Error ? e.message : "Erro desconhecido.";
   }
 
+  // contagem de PROJETOS (obras) distintos com gente embarcada agora, além
+  // da contagem de PESSOAS - o desktop mostra os dois números lado a lado
+  // ("1 pessoa embarcada · 1 projeto ativo")
+  const projetosAtivos = new Set(linhas.map((l) => l.embarque.obra_id).filter(Boolean)).size;
+  const agora = new Date();
+  const ultimaAtualizacao = `${agora.toLocaleDateString("pt-BR")} ${agora.toLocaleTimeString("pt-BR", {
+    hour: "2-digit", minute: "2-digit",
+  })}`;
+
   return (
     <div className="min-h-screen">
 
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-baseline justify-between mb-6">
+        <div className="flex items-start justify-between mb-1">
           <h1 className="text-xl font-bold text-navy">Embarques ativos agora</h1>
+          <p className="text-xs text-gray-400">Última atualização: {ultimaAtualizacao}</p>
+        </div>
+        <div className="flex items-center justify-between mb-6">
           <p className="text-sm text-gray-500">
             {linhas.length} pessoa{linhas.length === 1 ? "" : "s"} embarcada{linhas.length === 1 ? "" : "s"}
+            {" · "}
+            {projetosAtivos} projeto{projetosAtivos === 1 ? "" : "s"} ativo{projetosAtivos === 1 ? "" : "s"}
           </p>
+          <BotaoAtualizar />
         </div>
 
         {erro && (
@@ -43,10 +59,6 @@ export default async function PaginaEmbarques() {
           ))}
         </div>
       </main>
-
-      <footer className="text-center text-xs text-gray-400 py-8">
-        Developed by Rafael Carneiro · Sync ERP
-      </footer>
     </div>
   );
 }

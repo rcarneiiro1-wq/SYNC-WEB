@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type ReferenciaObra } from "@/lib/embarques";
+import Link from "next/link";
+import { formatarDataBr, recadoDeHoje, type LinhaEmbarque, type ReferenciaObra, type RdoResumo } from "@/lib/embarques";
 
 function corPercentual(percentual: number | null): string {
   if (percentual === null) return "bg-gray-200 text-gray-500";
@@ -34,11 +35,90 @@ function ChipReferencia({ referencia }: { referencia: ReferenciaObra }) {
   );
 }
 
+/** Modal do botão "Ver RDOs" - mesmos 3 cartõezinhos de estatística que o
+ * desktop mostra (Total de RDOs / Progresso atual / última data lançada),
+ * seguidos da lista de RDOs com link de PDF quando tiver. */
+function ModalRdos({ nome, rdos, percentual, aoFechar }: {
+  nome: string; rdos: RdoResumo[]; percentual: number | null; aoFechar: () => void;
+}) {
+  const ultimaData = rdos.reduce<string | null>((maior, r) => {
+    if (!r.data) return maior;
+    if (!maior || r.data > maior) return r.data;
+    return maior;
+  }, null);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={aoFechar}>
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-navy text-white px-5 py-4 flex items-start justify-between rounded-t-lg">
+          <div>
+            <p className="font-bold">{nome}</p>
+            <p className="text-xs text-azul">RDOs lançados neste embarque</p>
+          </div>
+          <button type="button" onClick={aoFechar} className="text-white/70 hover:text-white cursor-pointer">
+            ✕
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 px-5 pt-4">
+          <div className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2 text-center">
+            <p className="text-lg font-bold text-navy">{rdos.length}</p>
+            <p className="text-[10px] text-gray-500">Total de RDOs</p>
+          </div>
+          <div className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2 text-center">
+            <p className="text-lg font-bold text-navy">{percentual !== null ? `${percentual}%` : "-"}</p>
+            <p className="text-[10px] text-gray-500">Progresso atual</p>
+          </div>
+          <div className="bg-gray-50 border border-gray-100 rounded-md px-3 py-2 text-center">
+            <p className="text-sm font-bold text-navy pt-1">{formatarDataBr(ultimaData)}</p>
+            <p className="text-[10px] text-gray-500">Último RDO</p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          {rdos.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Nenhum RDO lançado ainda.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-gray-100">
+              {rdos.map((rdo) => (
+                <div key={rdo.id} className="flex items-center justify-between py-2.5">
+                  <div>
+                    <p className="text-sm font-semibold text-navy">
+                      RDO {String(rdo.numeroRdo).padStart(3, "0")}
+                    </p>
+                    <p className="text-xs text-gray-400">{formatarDataBr(rdo.data)}</p>
+                  </div>
+                  {rdo.pdfUrl ? (
+                    <a
+                      href={rdo.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-semibold text-azul hover:underline whitespace-nowrap"
+                    >
+                      ⬇ Baixar PDF
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-300 whitespace-nowrap">Sem PDF</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [rdosAbertos, setRdosAbertos] = useState(false);
   const {
     embarque, obra, totalRdos, percentual, diasEmbarcado, dataInicioReal, itensAvanco, rdosPendentes,
-    percentualDescasado, percentualPelosItens, referencias, referenciasHoje,
+    percentualDescasado, percentualPelosItens, referencias, referenciasHoje, rdos,
   } = linha;
   const temItens = itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length > 0;
   const temPendencia = rdosPendentes > 0;
@@ -238,6 +318,33 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
             </div>
           </div>
         </>
+      )}
+
+      <div className="h-px bg-gray-100" />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setRdosAbertos(true)}
+          className="flex-1 text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2 cursor-pointer"
+        >
+          📂 Ver RDOs
+        </button>
+        <Link
+          href={`/relatorios/avanco?ids=${embarque.id}`}
+          target="_blank"
+          className="flex-1 text-center text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md py-2"
+        >
+          🖨️ Gerar relatório PDF
+        </Link>
+      </div>
+
+      {rdosAbertos && (
+        <ModalRdos
+          nome={embarque.efetivo_nome || "-"}
+          rdos={rdos}
+          percentual={percentual}
+          aoFechar={() => setRdosAbertos(false)}
+        />
       )}
     </div>
   );

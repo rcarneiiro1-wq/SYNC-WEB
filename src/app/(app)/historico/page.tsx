@@ -83,10 +83,6 @@ export default async function PaginaHistorico({
 
         {!erro && linhas.length > 0 && <TabelaHistorico linhas={linhas} />}
       </main>
-
-      <footer className="text-center text-xs text-gray-400 py-8">
-        Developed by Rafael Carneiro · Sync ERP
-      </footer>
     </div>
   );
 }

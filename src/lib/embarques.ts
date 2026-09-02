@@ -88,6 +88,9 @@ export type LinhaEmbarque = {
   percentualPelosItens: number | null;
   referencias: ReferenciaObra[];
   referenciasHoje: ReferenciaDoDia[];
+  // lista dos RDOs desse embarque (mais recente primeiro) - usado no botão
+  // "Ver RDOs" do card (igual o desktop tem), não precisa buscar de novo
+  rdos: RdoResumo[];
 };
 
 /** % de avanço do RDO mais recente - mesma prioridade do desktop:
@@ -522,6 +525,21 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
       percentualPelosItens: percentualPelosItens(ultimoRdo),
       referencias: referenciasPorObra.get(embarque.obra_id) || [],
       referenciasHoje: referenciasDoDia(ultimoRdo),
+      // já vem ordenado do mais recente pro mais antigo (mesma query
+      // acima, "numero_rdo" descendente)
+      rdos: listaRdos.map((r) => ({
+        id: r.id, numeroRdo: r.numero_rdo, data: r.data, pdfUrl: r.arquivo_pdf_url,
+      })),
     };
   });
+}
+
+/** Todos os nomes de colaboradores que já apareceram em QUALQUER embarque
+ * (ativo ou finalizado) - usado no autocomplete da tela "Histórico
+ * colaborador" (diferente de `buscarOpcoesFiltro`, que só olha pra
+ * embarques já finalizados). */
+export async function buscarNomesTodosColaboradores(): Promise<string[]> {
+  const { data, error } = await supabase.from("embarques").select("efetivo_nome");
+  if (error || !data) return [];
+  return Array.from(new Set(data.map((e) => e.efetivo_nome).filter((v): v is string => Boolean(v)))).sort();
 }

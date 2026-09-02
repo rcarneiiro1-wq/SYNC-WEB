@@ -8,46 +8,71 @@ import {
   Home,
   FileText,
   Ship,
-  Award,
-  Users,
+  Clock,
   Building2,
+  Users,
+  Printer,
+  Award,
   BarChart3,
   Settings,
-  ChevronDown,
   LogOut,
+  Info,
+  X,
 } from "lucide-react";
 
-type ItemMenu = {
-  rotulo: string;
-  href?: string;
-  icone: React.ElementType;
-  emBreve?: boolean;
-  subItens?: { rotulo: string; href: string }[];
-};
+type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
 
-const ITENS: ItemMenu[] = [
-  { rotulo: "Início", href: "/", icone: Home },
-  { rotulo: "RDO", icone: FileText, emBreve: true },
-  {
-    rotulo: "Embarques",
-    icone: Ship,
-    subItens: [
-      { rotulo: "Ativos agora", href: "/embarques/ativos" },
-      { rotulo: "Histórico", href: "/historico" },
-      { rotulo: "Relatório por empresa", href: "/relatorios" },
-    ],
-  },
-  { rotulo: "Certificados", icone: Award, emBreve: true },
-  { rotulo: "Colaboradores", icone: Users, emBreve: true },
-  { rotulo: "Empresas", icone: Building2, emBreve: true },
-  { rotulo: "Relatórios", icone: BarChart3, emBreve: true },
-  { rotulo: "Configurações", icone: Settings, emBreve: true },
+// "GERENCIAMENTO DE EMBARQUE" achatado - sem sub-menu que precisa
+// abrir/fechar, igual a referência do desktop (5 itens direto na lateral).
+const ITENS_EMBARQUE: ItemMenu[] = [
+  { rotulo: "Embarques ativos", href: "/embarques/ativos", icone: Ship },
+  { rotulo: "Histórico", href: "/historico", icone: Clock },
+  { rotulo: "Relatório por empresa", href: "/relatorios", icone: Building2 },
+  { rotulo: "Histórico colaborador", href: "/historico-colaborador", icone: Users },
+  { rotulo: "Relatório de embarcados", href: "/relatorio-embarcados", icone: Printer },
 ];
+
+// resto do sistema (ainda não migrado pro web) - continua "em breve"
+const ITENS_EM_BREVE: { rotulo: string; icone: React.ElementType }[] = [
+  { rotulo: "RDO", icone: FileText },
+  { rotulo: "Certificados", icone: Award },
+  { rotulo: "Relatórios gerais", icone: BarChart3 },
+  { rotulo: "Configurações", icone: Settings },
+];
+
+const VERSAO_SISTEMA = "Sync ERP v2.10.23";
 
 function iniciaisDoNome(nome: string): string {
   const partes = nome.trim().split(/\s+/);
   if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
+
+function ModalSobre({ aoFechar }: { aoFechar: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 print:hidden"
+      onClick={aoFechar}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-sm mx-4 p-6 text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={aoFechar}
+          className="float-right text-gray-400 hover:text-gray-600 cursor-pointer"
+          aria-label="Fechar"
+        >
+          <X size={18} />
+        </button>
+        <Image src="/logo-syncerp.png" alt="Sync ERP" width={56} height={56} className="mx-auto mb-3" />
+        <p className="font-bold text-navy">{VERSAO_SISTEMA}</p>
+        <p className="text-sm text-gray-500 mt-1">Desenvolvido por Rafael Carneiro</p>
+        <p className="text-xs text-gray-400 mt-4">Sistema de gerenciamento de embarques offshore — MF Máquinas</p>
+      </div>
+    </div>
+  );
 }
 
 export function Sidebar({
@@ -60,15 +85,10 @@ export function Sidebar({
   sair: () => Promise<void>;
 }) {
   const pathname = usePathname();
-  // o grupo "Embarques" começa aberto se a página atual for uma das
-  // sub-páginas dele - assim quem está em "Histórico" não vê o menu
-  // fechado, sem saber onde está
-  const [embarquesAberto, setEmbarquesAberto] = useState(
-    pathname.startsWith("/embarques") || pathname.startsWith("/historico") || pathname.startsWith("/relatorios")
-  );
+  const [sobreAberto, setSobreAberto] = useState(false);
 
   return (
-    <aside className="w-64 shrink-0 bg-navy text-white flex flex-col h-screen sticky top-0">
+    <aside className="w-64 shrink-0 bg-navy text-white flex flex-col h-screen sticky top-0 print:hidden">
       <div className="px-5 pt-6 pb-5 flex items-center gap-3 border-b border-white/10">
         <Image src="/logo-syncerp.png" alt="Sync ERP" width={40} height={40} className="shrink-0" priority />
         <div className="min-w-0">
@@ -78,67 +98,26 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto py-3 px-2.5 flex flex-col gap-0.5">
-        {ITENS.map((item) => {
+        <Link
+          href="/"
+          className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+            pathname === "/" ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+          }`}
+        >
+          <Home size={18} className="shrink-0" />
+          <span>Início</span>
+        </Link>
+
+        <p className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">
+          Gerenciamento de embarque
+        </p>
+        {ITENS_EMBARQUE.map((item) => {
           const Icone = item.icone;
-
-          if (item.subItens) {
-            return (
-              <div key={item.rotulo}>
-                <button
-                  type="button"
-                  onClick={() => setEmbarquesAberto((v) => !v)}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-300 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
-                >
-                  <Icone size={18} className="shrink-0" />
-                  <span className="flex-1 text-left">{item.rotulo}</span>
-                  <ChevronDown
-                    size={16}
-                    className={`shrink-0 transition-transform ${embarquesAberto ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {embarquesAberto && (
-                  <div className="ml-4 pl-4 border-l border-white/10 flex flex-col gap-0.5 mt-0.5 mb-1">
-                    {item.subItens.map((sub) => {
-                      const ativo = pathname === sub.href;
-                      return (
-                        <Link
-                          key={sub.href}
-                          href={sub.href}
-                          className={`px-3 py-2 rounded-md text-sm transition-colors ${
-                            ativo
-                              ? "bg-azul/20 text-white font-semibold"
-                              : "text-gray-400 hover:bg-white/5 hover:text-white"
-                          }`}
-                        >
-                          {sub.rotulo}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          }
-
-          if (item.emBreve) {
-            return (
-              <div
-                key={item.rotulo}
-                title="Em breve nessa área"
-                className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-500 cursor-not-allowed select-none"
-              >
-                <Icone size={18} className="shrink-0" />
-                <span className="flex-1">{item.rotulo}</span>
-                <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded">em breve</span>
-              </div>
-            );
-          }
-
           const ativo = pathname === item.href;
           return (
             <Link
-              key={item.rotulo}
-              href={item.href!}
+              key={item.href}
+              href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
               }`}
@@ -146,6 +125,21 @@ export function Sidebar({
               <Icone size={18} className="shrink-0" />
               <span>{item.rotulo}</span>
             </Link>
+          );
+        })}
+
+        {ITENS_EM_BREVE.map((item) => {
+          const Icone = item.icone;
+          return (
+            <div
+              key={item.rotulo}
+              title="Em breve nessa área"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-gray-500 cursor-not-allowed select-none"
+            >
+              <Icone size={18} className="shrink-0" />
+              <span className="flex-1">{item.rotulo}</span>
+              <span className="text-[10px] bg-white/5 text-gray-500 px-1.5 py-0.5 rounded">em breve</span>
+            </div>
           );
         })}
       </nav>
@@ -171,7 +165,22 @@ export function Sidebar({
             Sair do sistema
           </button>
         </form>
+        <button
+          type="button"
+          onClick={() => setSobreAberto(true)}
+          className="w-full mt-0.5 flex items-center gap-2.5 px-2 py-2 rounded-md text-xs text-gray-400 hover:bg-white/5 hover:text-white transition-colors cursor-pointer"
+        >
+          <Info size={15} />
+          Sobre
+        </button>
+        <p className="text-center text-[10px] text-gray-500 mt-2">
+          {VERSAO_SISTEMA}
+          <br />
+          Desenvolvido por Rafael Carneiro
+        </p>
       </div>
+
+      {sobreAberto && <ModalSobre aoFechar={() => setSobreAberto(false)} />}
     </aside>
   );
 }
