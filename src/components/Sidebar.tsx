@@ -18,6 +18,7 @@ import {
   LogOut,
   Info,
   X,
+  ShieldAlert,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -79,10 +80,12 @@ export function Sidebar({
   nome,
   funcao,
   sair,
+  ehAdmin,
 }: {
   nome: string;
   funcao?: string;
   sair: () => Promise<void>;
+  ehAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const [sobreAberto, setSobreAberto] = useState(false);
@@ -142,6 +145,23 @@ export function Sidebar({
             </div>
           );
         })}
+
+        {ehAdmin && (
+          <>
+            <p className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-wide text-gray-500 uppercase">
+              Administração
+            </p>
+            <Link
+              href="/admin"
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                pathname === "/admin" ? "bg-vermelho text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <ShieldAlert size={18} className="shrink-0" />
+              <span>Painel admin</span>
+            </Link>
+          </>
+        )}
       </nav>
 
       <div className="border-t border-white/10 px-3 py-3">
