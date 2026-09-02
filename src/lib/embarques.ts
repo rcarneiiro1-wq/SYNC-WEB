@@ -187,7 +187,7 @@ async function buscarReferenciasPorObra(idsObras: string[]): Promise<Map<string,
     .order("tipo", { ascending: true })
     .order("codigo", { ascending: true });
   if (error || !data) return mapa;
-  for (const ref of data as ReferenciaObra[]) {
+  for (const ref of data as unknown as ReferenciaObra[]) {
     const lista = mapa.get(ref.obra_id) || [];
     lista.push(ref);
     mapa.set(ref.obra_id, lista);
@@ -358,30 +358,46 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   if (filtros.dataFim) query = query.lte("data_fim", filtros.dataFim);
   query = query.order("data_inicio", { ascending: false });
 
-  const { data: embarques, error: erroEmb } = await query;
+  const { data: embarquesRaw, error: erroEmb } = await query;
 
   if (erroEmb) throw new Error(`Não consegui buscar o histórico: ${erroEmb.message}`);
-  if (!embarques || embarques.length === 0) return [];
+  if (!embarquesRaw || embarquesRaw.length === 0) return [];
+  // o `.select()` usa `::text` (cast do Postgres) pra evitar perda de
+  // precisão nos IDs grandes - mas o supabase-js não entende essa sintaxe
+  // na hora de inferir o tipo em tempo de compilação, e cai num tipo
+  // genérico de erro (GenericStringError). O cast abaixo não muda nada em
+  // tempo de execução (a query já roda certo), só corrige o tipo pro
+  // TypeScript conseguir compilar.
+  const embarques = embarquesRaw as unknown as Embarque[];
 
   const idsEmbarques = embarques.map((e) => e.id);
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
-  const { data: rdos, error: erroRdos } = await supabase
+  const { data: rdosRaw, error: erroRdos } = await supabase
     .from("rdos")
     .select(COLUNAS_RDOS)
     .in("embarque_id", idsEmbarques)
     .order("numero_rdo", { ascending: false });
 
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  const rdos = rdosRaw as unknown as Rdo[];
 
   const referenciasPorObra = await buscarReferenciasPorObra(idsObras);
 
-  const { data: anexos, error: erroAnexos } = await supabase
+  const { data: anexosRaw, error: erroAnexos } = await supabase
     .from("anexos_embarque")
     .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
     .in("embarque_id", idsEmbarques)
     .order("enviado_em", { ascending: false });
   // se der erro (ex: tabela ainda não criada no Supabase), não trava o
   // histórico inteiro por causa disso - só mostra sem os anexos
+  const anexos = anexosRaw as unknown as {
+    id: string;
+    embarque_id: string;
+    nome_arquivo: string;
+    url_nuvem: string | null;
+    enviado_por: string | null;
+    enviado_em: string | null;
+  }[];
   const anexosPorEmbarque = new Map<string, AnexoEmbarque[]>();
   for (const anexo of erroAnexos ? [] : anexos || []) {
     const lista = anexosPorEmbarque.get(anexo.embarque_id) || [];
@@ -439,19 +455,20 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
 }
 
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
-  const { data: embarques, error: erroEmb } = await supabase
+  const { data: embarquesRaw, error: erroEmb } = await supabase
     .from("embarques")
     .select(COLUNAS_EMBARQUES)
     .eq("ativo", true)
     .order("data_inicio", { ascending: false });
 
   if (erroEmb) throw new Error(`Não consegui buscar os embarques: ${erroEmb.message}`);
-  if (!embarques || embarques.length === 0) return [];
+  if (!embarquesRaw || embarquesRaw.length === 0) return [];
+  const embarques = embarquesRaw as unknown as Embarque[];
 
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const idsEmbarques = embarques.map((e) => e.id);
 
-  const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }, referenciasPorObra] = await Promise.all([
+  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }, referenciasPorObra] = await Promise.all([
     supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
     supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques).order("numero_rdo", { ascending: false }),
     buscarReferenciasPorObra(idsObras),
@@ -459,6 +476,8 @@ export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  const obras = obrasRaw as unknown as Obra[];
+  const rdos = rdosRaw as unknown as Rdo[];
 
   const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
   const rdosPorEmbarque = new Map<string, Rdo[]>();

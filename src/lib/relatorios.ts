@@ -140,25 +140,32 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     "id::text, embarque_id::text, numero_rdo, data, local_atuacao, status, arquivo_pdf_url, avanco_json, " +
     "avanco_percentual, descricao, justificativa_percentual, atualizado_em, referencias_dia_json";
 
-  const { data: embarques, error: erroEmb } = await supabase
+  const { data: embarquesRaw, error: erroEmb } = await supabase
     .from("embarques")
     .select(COLUNAS_EMBARQUES)
     .lte("data_inicio", periodo.fim)
     .or(`data_fim.gte.${periodo.inicio},data_fim.is.null`);
 
   if (erroEmb) throw new Error(`Não consegui buscar os embarques: ${erroEmb.message}`);
-  if (!embarques || embarques.length === 0) return [];
+  if (!embarquesRaw || embarquesRaw.length === 0) return [];
+  // mesmo motivo do embarques.ts: o supabase-js não entende o `::text` do
+  // Postgres na hora de inferir o tipo em tempo de compilação (cai num
+  // tipo genérico de erro) - isso não afeta a query em si, só o
+  // TypeScript, e o cast abaixo corrige só isso.
+  const embarques = embarquesRaw as unknown as Embarque[];
 
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
   const idsEmbarques = embarques.map((e) => e.id);
 
-  const [{ data: obras, error: erroObras }, { data: rdos, error: erroRdos }] = await Promise.all([
+  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }] = await Promise.all([
     supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
     supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques),
   ]);
 
   if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
   if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  const obras = obrasRaw as unknown as Obra[];
+  const rdos = rdosRaw as unknown as Rdo[];
 
   const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
   const rdosPorEmbarque = new Map<string, Rdo[]>();
