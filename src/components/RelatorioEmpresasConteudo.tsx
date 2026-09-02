@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   buscarRelatorioPorEmpresa,
   periodoMesCalendario,
@@ -9,6 +9,7 @@ import {
   type Periodo,
   type LinhaRelatorioEmpresa,
 } from "@/lib/relatorios";
+import { SeletorEmpresas } from "@/components/SeletorEmpresas";
 
 type TipoPeriodo = "calendario" | "fechamento";
 
@@ -151,14 +152,18 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
   );
 }
 
-export function RelatorioEmpresasConteudo() {
+export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCadastradas: string[] }) {
   const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>("calendario");
   const [periodo, setPeriodo] = useState<Periodo>(() => periodoAtual("calendario"));
   const [linhas, setLinhas] = useState<LinhaRelatorioEmpresa[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // vazio = mostra todas as empresas (comportamento de antes) - só filtra
+  // de verdade quando a pessoa clica em pelo menos um card
+  const [empresasSelecionadas, setEmpresasSelecionadas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de loading/erro ao trocar de período, antes de disparar a busca
     setCarregando(true);
     setErro(null);
     buscarRelatorioPorEmpresa(periodo)
@@ -176,12 +181,26 @@ export function RelatorioEmpresasConteudo() {
     setPeriodo((atual) => periodoAdjacente(atual, tipoPeriodo, direcao));
   };
 
-  const totalDiarias = linhas.reduce((s, l) => s + l.totalDiarias, 0);
-  const totalEmbarques = linhas.reduce((s, l) => s + l.numeroEmbarques, 0);
-  const maiorDiarias = Math.max(1, ...linhas.map((l) => l.totalDiarias));
+  const linhasFiltradas = useMemo(
+    () => (empresasSelecionadas.size === 0 ? linhas : linhas.filter((l) => empresasSelecionadas.has(l.empresa))),
+    [linhas, empresasSelecionadas]
+  );
+
+  const totalDiarias = linhasFiltradas.reduce((s, l) => s + l.totalDiarias, 0);
+  const totalEmbarques = linhasFiltradas.reduce((s, l) => s + l.numeroEmbarques, 0);
+  const maiorDiarias = Math.max(1, ...linhasFiltradas.map((l) => l.totalDiarias));
 
   return (
     <>
+      {/* Cards de empresa - selecionar uma ou mais pra ver só elas */}
+      <div className="mb-5">
+        <SeletorEmpresas
+          empresas={empresasCadastradas}
+          selecionadas={empresasSelecionadas}
+          aoMudar={setEmpresasSelecionadas}
+        />
+      </div>
+
       {/* Seletor de tipo de período */}
       <div className="flex gap-2 mb-4">
         <button
@@ -253,13 +272,15 @@ export function RelatorioEmpresasConteudo() {
         </div>
       )}
 
-      {!carregando && !erro && linhas.length === 0 && (
+      {!carregando && !erro && linhasFiltradas.length === 0 && (
         <div className="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-gray-500">
-          Nenhum embarque encontrado nesse período.
+          {linhas.length === 0
+            ? "Nenhum embarque encontrado nesse período."
+            : "Nenhum embarque encontrado nesse período para a(s) empresa(s) selecionada(s)."}
         </div>
       )}
 
-      {!carregando && !erro && linhas.length > 0 && (
+      {!carregando && !erro && linhasFiltradas.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
           <table className="w-full">
             <thead>
@@ -274,7 +295,7 @@ export function RelatorioEmpresasConteudo() {
               </tr>
             </thead>
             <tbody>
-              {linhas.map((linha) => (
+              {linhasFiltradas.map((linha) => (
                 <LinhaTabela key={linha.empresa} linha={linha} maiorDiarias={maiorDiarias} />
               ))}
             </tbody>
@@ -283,8 +304,8 @@ export function RelatorioEmpresasConteudo() {
       )}
 
       <p className="text-xs text-gray-400 mt-4">
-        "Diárias" conta só os dias de cada embarque que realmente caem dentro do período mostrado - se um
-        embarque atravessa a virada, cada período fica só com a parte real dele. "Embarques" conta só os que
+        &quot;Diárias&quot; conta só os dias de cada embarque que realmente caem dentro do período mostrado - se um
+        embarque atravessa a virada, cada período fica só com a parte real dele. &quot;Embarques&quot; conta só os que
         começaram dentro desse período.
       </p>
     </>

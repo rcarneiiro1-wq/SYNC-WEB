@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SeletorEmpresas } from "@/components/SeletorEmpresas";
 
 type ValoresFiltro = {
   colaborador: string;
   obra: string;
+  empresas: string[];
   situacao: string;
   dataInicio: string;
   dataFim: string;
@@ -14,15 +16,18 @@ type ValoresFiltro = {
 export function FiltroHistorico({
   colaboradoresSugeridos,
   obrasSugeridas,
+  empresasCadastradas,
   valoresIniciais,
 }: {
   colaboradoresSugeridos: string[];
   obrasSugeridas: string[];
+  empresasCadastradas: string[];
   valoresIniciais: ValoresFiltro;
 }) {
   const router = useRouter();
   const [colaborador, setColaborador] = useState(valoresIniciais.colaborador);
   const [obra, setObra] = useState(valoresIniciais.obra);
+  const [empresas, setEmpresas] = useState<Set<string>>(new Set(valoresIniciais.empresas));
   const [situacao, setSituacao] = useState(valoresIniciais.situacao);
   const [dataInicio, setDataInicio] = useState(valoresIniciais.dataInicio);
   const [dataFim, setDataFim] = useState(valoresIniciais.dataFim);
@@ -32,6 +37,7 @@ export function FiltroHistorico({
     const params = new URLSearchParams();
     if (colaborador) params.set("colaborador", colaborador);
     if (obra) params.set("obra", obra);
+    for (const empresa of empresas) params.append("empresa", empresa);
     if (situacao && situacao !== "todos") params.set("situacao", situacao);
     if (dataInicio) params.set("dataInicio", dataInicio);
     if (dataFim) params.set("dataFim", dataFim);
@@ -42,6 +48,7 @@ export function FiltroHistorico({
   function limpar() {
     setColaborador("");
     setObra("");
+    setEmpresas(new Set());
     setSituacao("todos");
     setDataInicio("");
     setDataFim("");
@@ -51,8 +58,11 @@ export function FiltroHistorico({
   return (
     <form
       onSubmit={buscar}
-      className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-wrap items-end gap-4"
+      className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-col gap-4"
     >
+      <SeletorEmpresas empresas={empresasCadastradas} selecionadas={empresas} aoMudar={setEmpresas} />
+
+      <div className="flex flex-wrap items-end gap-4">
       <div className="flex flex-col gap-1">
         <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-colaborador">
           Colaborador
@@ -147,6 +157,7 @@ export function FiltroHistorico({
         >
           Limpar
         </button>
+      </div>
       </div>
     </form>
   );

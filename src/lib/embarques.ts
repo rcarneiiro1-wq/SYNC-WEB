@@ -383,6 +383,7 @@ function intervaloEntreRdos(
 export type FiltrosHistorico = {
   colaborador?: string;
   obra?: string;
+  empresas?: string[]; // uma ou mais empresas (cards selecionáveis) - vazio/ausente = todas
   dataInicio?: string; // AAAA-MM-DD
   dataFim?: string; // AAAA-MM-DD
   situacao?: "todos" | "concluido" | "pendencia";
@@ -398,6 +399,18 @@ export async function buscarOpcoesFiltro(): Promise<{ colaboradores: string[]; o
   const colaboradores = Array.from(new Set(data.map((e) => e.efetivo_nome).filter((v): v is string => Boolean(v)))).sort();
   const obras = Array.from(new Set(data.map((e) => e.obra_nome).filter((v): v is string => Boolean(v)))).sort();
   return { colaboradores, obras };
+}
+
+/** Todas as empresas já cadastradas em alguma obra - usado pra montar os
+ * "cards" de empresa (Histórico e Relatório por empresa), igual o desktop
+ * já mostra. Não depende do período/resultado da busca - aparece sempre
+ * a lista completa, mesmo empresa sem nenhum embarque no momento. */
+export async function buscarEmpresasCadastradas(): Promise<string[]> {
+  const { data, error } = await supabase.from("obras").select("empresa");
+  if (error || !data) return [];
+  return Array.from(new Set(data.map((o) => (o.empresa || "").trim()).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b, "pt-BR")
+  );
 }
 
 const COLUNAS_EMBARQUES =
@@ -494,9 +507,20 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   // dias-sem-RDO calculado (fallback pra embarques antigos, sem essa
   // informação ainda).
   const temPendencia = (l: LinhaHistorico) => l.embarque.status_final === "com_pendencia" || l.pendentes > 0;
-  if (filtros.situacao === "concluido") return linhas.filter((l) => !temPendencia(l));
-  if (filtros.situacao === "pendencia") return linhas.filter((l) => temPendencia(l));
-  return linhas;
+  let resultado = linhas;
+  if (filtros.situacao === "concluido") resultado = resultado.filter((l) => !temPendencia(l));
+  if (filtros.situacao === "pendencia") resultado = resultado.filter((l) => temPendencia(l));
+
+  // empresa também é filtrada em memória, mesmo motivo da "situação" -
+  // não tem chave estrangeira configurada entre embarques/obras pro
+  // Supabase filtrar isso direto na query (ver embarques.ts/admin.ts),
+  // e nesse ponto o conjunto já está pequeno o bastante pra não pesar.
+  if (filtros.empresas && filtros.empresas.length > 0) {
+    const selecionadas = new Set(filtros.empresas);
+    resultado = resultado.filter((l) => l.obra?.empresa && selecionadas.has(l.obra.empresa));
+  }
+
+  return resultado;
 }
 
 export async function buscarEmbarquesAtivos(): Promise<LinhaEmbarque[]> {

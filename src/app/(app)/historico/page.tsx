@@ -1,4 +1,10 @@
-import { buscarEmbarquesFinalizados, buscarOpcoesFiltro, type LinhaHistorico, type FiltrosHistorico } from "@/lib/embarques";
+import {
+  buscarEmbarquesFinalizados,
+  buscarOpcoesFiltro,
+  buscarEmpresasCadastradas,
+  type LinhaHistorico,
+  type FiltrosHistorico,
+} from "@/lib/embarques";
 import { TabelaHistorico } from "@/components/TabelaHistorico";
 import { FiltroHistorico } from "@/components/FiltroHistorico";
 
@@ -21,9 +27,15 @@ export default async function PaginaHistorico({
 }) {
   const params = await searchParams;
 
+  // "empresa" pode aparecer repetido na URL (um card selecionado = um
+  // parâmetro) - diferente dos outros filtros, que são só um valor
+  const empresasParam = params.empresa;
+  const empresas = empresasParam ? (Array.isArray(empresasParam) ? empresasParam : [empresasParam]) : [];
+
   const filtros: FiltrosHistorico = {
     colaborador: _texto(params.colaborador),
     obra: _texto(params.obra),
+    empresas,
     dataInicio: _texto(params.dataInicio),
     dataFim: _texto(params.dataFim),
     situacao: (_texto(params.situacao) as FiltrosHistorico["situacao"]) || "todos",
@@ -32,21 +44,24 @@ export default async function PaginaHistorico({
   let linhas: LinhaHistorico[] = [];
   let erro: string | null = null;
   let opcoes: { colaboradores: string[]; obras: string[] } = { colaboradores: [], obras: [] };
+  let empresasCadastradas: string[] = [];
 
   try {
-    const [linhasResultado, opcoesResultado] = await Promise.all([
+    const [linhasResultado, opcoesResultado, empresasResultado] = await Promise.all([
       buscarEmbarquesFinalizados(filtros),
       buscarOpcoesFiltro(),
+      buscarEmpresasCadastradas(),
     ]);
     linhas = linhasResultado;
     opcoes = opcoesResultado;
+    empresasCadastradas = empresasResultado;
   } catch (e) {
     erro = e instanceof Error ? e.message : "Erro desconhecido.";
   }
 
   const temFiltroAtivo = Boolean(
-    filtros.colaborador || filtros.obra || filtros.dataInicio || filtros.dataFim ||
-      (filtros.situacao && filtros.situacao !== "todos")
+    filtros.colaborador || filtros.obra || (filtros.empresas && filtros.empresas.length > 0) ||
+      filtros.dataInicio || filtros.dataFim || (filtros.situacao && filtros.situacao !== "todos")
   );
 
   return (
@@ -58,9 +73,11 @@ export default async function PaginaHistorico({
         <FiltroHistorico
           colaboradoresSugeridos={opcoes.colaboradores}
           obrasSugeridas={opcoes.obras}
+          empresasCadastradas={empresasCadastradas}
           valoresIniciais={{
             colaborador: filtros.colaborador ?? "",
             obra: filtros.obra ?? "",
+            empresas: filtros.empresas ?? [],
             situacao: filtros.situacao ?? "todos",
             dataInicio: filtros.dataInicio ?? "",
             dataFim: filtros.dataFim ?? "",
