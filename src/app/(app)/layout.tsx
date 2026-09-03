@@ -26,7 +26,12 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         temAcessoEmbarques={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("gerenciamento_embarques"))}
         temAcessoCertificados={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("certificados"))}
       />
-      <div className="flex-1 min-w-0">{children}</div>
+      {/* 03/09: pt-14 no celular só pra não ficar embaixo da barra fixa
+          (hambúrguer) que a Sidebar passou a desenhar nessa largura -
+          some no desktop (md:pt-0, onde não existe barra fixa nenhuma)
+          e na impressão (a barra já nem aparece, mas o respiro também não
+          deve aparecer no papel). */}
+      <div className="flex-1 min-w-0 pt-14 md:pt-0 print:pt-0">{children}</div>
     </div>
   );
 }
