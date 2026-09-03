@@ -198,7 +198,7 @@ function LinhaTabela({
 }: {
   linha: LinhaHistorico; par: boolean; expandida: boolean; aoClicar: () => void;
 }) {
-  const { embarque, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, justificativa } = linha;
+  const { embarque, obra, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, justificativa } = linha;
 
   return (
     <tr
@@ -210,7 +210,7 @@ function LinhaTabela({
           <span className={`text-gray-300 text-xs transition-transform ${expandida ? "rotate-90" : ""}`}>▶</span>
           <div>
             <p className="text-sm font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
-            <p className="text-xs text-gray-400 leading-tight mt-0.5">{embarque.obra_nome || "-"}</p>
+            <p className="text-xs text-gray-400 leading-tight mt-0.5">{obra?.nome || embarque.obra_nome || "-"}</p>
           </div>
         </div>
       </td>
