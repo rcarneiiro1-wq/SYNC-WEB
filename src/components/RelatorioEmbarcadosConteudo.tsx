@@ -80,7 +80,7 @@ export function RelatorioEmbarcadosConteudo({ linhas }: { linhas: LinhaEmbarque[
                   </td>
                   <td className="px-4 py-2.5 font-medium text-navy">{embarque.efetivo_nome || "-"}</td>
                   <td className="px-4 py-2.5 text-gray-600">{embarque.efetivo_funcao || "-"}</td>
-                  <td className="px-4 py-2.5 text-gray-600">{embarque.obra_nome || "-"}</td>
+                  <td className="px-4 py-2.5 text-gray-600">{obra?.nome || embarque.obra_nome || "-"}</td>
                   <td className="px-4 py-2.5 text-gray-600">{obra?.empresa || "-"}</td>
                   <td className="px-4 py-2.5 text-gray-600">{percentual !== null ? `${percentual}%` : "-"}</td>
                   <td className="px-4 py-2.5 text-gray-600">

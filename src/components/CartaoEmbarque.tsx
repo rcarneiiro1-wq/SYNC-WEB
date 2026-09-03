@@ -287,7 +287,7 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
 
       <dl className="grid grid-cols-2 gap-y-2 text-sm">
         <dt className="text-gray-400">Obra / Plataforma</dt>
-        <dd className="text-right text-gray-700 font-medium">{embarque.obra_nome || "-"}</dd>
+        <dd className="text-right text-gray-700 font-medium">{obra?.nome || embarque.obra_nome || "-"}</dd>
 
         <dt className="text-gray-400">Empresa</dt>
         <dd className="text-right text-gray-700">{obra?.empresa || "-"}</dd>

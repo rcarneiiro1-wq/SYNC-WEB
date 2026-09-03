@@ -23,7 +23,7 @@ function CartaoRelatorioPessoa({ linha }: { linha: LinhaEmbarque }) {
 
   const partesSubinfo = [
     embarque.efetivo_funcao,
-    embarque.obra_nome || obra?.nome,
+    obra?.nome || embarque.obra_nome,
     obra?.data_desembarque_prevista
       ? `Previsão de desembarque: ${formatarDataBr(obra.data_desembarque_prevista)}`
       : null,

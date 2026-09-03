@@ -242,7 +242,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     acumulador.embarques.push({
       embarqueId: embarque.id,
       colaborador: embarque.efetivo_nome || "-",
-      obra: embarque.obra_nome || obra?.nome || "-",
+      obra: obra?.nome || embarque.obra_nome || "-",
       periodoNoRecorte: `${formatarCurto(inicioNoRecorte)} → ${formatarCurto(fimNoRecorte)}`,
       diariasNoRecorte: diarias,
       percentualUltimoRdo: percentual ?? null,

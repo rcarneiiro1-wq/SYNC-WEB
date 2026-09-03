@@ -39,14 +39,14 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
   const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter((v): v is string => Boolean(v))));
 
   const [{ data: obrasRaw }, { data: rdosRaw }, { data: anexosRaw }] = await Promise.all([
-    supabase.from("obras").select("id::text, empresa").in("id", idsObras.length ? idsObras : ["-1"]),
+    supabase.from("obras").select("id::text, nome, empresa").in("id", idsObras.length ? idsObras : ["-1"]),
     supabase.from("rdos").select("embarque_id::text").in("embarque_id", idsEmbarques),
     supabase.from("anexos_embarque").select("embarque_id::text").in("embarque_id", idsEmbarques),
   ]);
 
-  const empresaPorObra = new Map<string, string | null>(
-    ((obrasRaw || []) as unknown as { id: string; empresa: string | null }[]).map((o) => [o.id, o.empresa])
-  );
+  const obrasTyped = (obrasRaw || []) as unknown as { id: string; nome: string | null; empresa: string | null }[];
+  const empresaPorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.empresa]));
+  const nomePorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.nome]));
   const contarPor = (linhas: { embarque_id: string }[] | null) => {
     const mapa = new Map<string, number>();
     for (const l of linhas || []) mapa.set(l.embarque_id, (mapa.get(l.embarque_id) || 0) + 1);
@@ -57,7 +57,7 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
 
   return embarques.map((e) => ({
     id: e.id,
-    obraNome: e.obra_nome,
+    obraNome: (e.obra_id ? nomePorObra.get(e.obra_id) : null) ?? e.obra_nome,
     obraEmpresa: e.obra_id ? empresaPorObra.get(e.obra_id) ?? null : null,
     efetivoNome: e.efetivo_nome,
     efetivoFuncao: e.efetivo_funcao,
