@@ -77,7 +77,10 @@ function formularioDoUsuario(u: UsuarioCompleto): FormularioUsuario {
 }
 
 function rotuloAcessos(u: UsuarioCompleto): string {
-  const nomes = SISTEMAS_PERMISSAO.filter((s) => u.permissoes.includes(s.chave)).map((s) => s.rotulo);
+  // tipado como string[] explicitamente - sem isso o TS infere a união
+  // literal dos rótulos de SISTEMAS_PERMISSAO (por causa do "as const"),
+  // e "Administrador" (que não é uma das 5 permissões) não entra no unshift
+  const nomes: string[] = SISTEMAS_PERMISSAO.filter((s) => u.permissoes.includes(s.chave)).map((s) => s.rotulo);
   if (u.ehAdmin) nomes.unshift("Administrador");
   return nomes.length ? nomes.join(", ") : "—";
 }
