@@ -1,10 +1,101 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Trash2, Search, AlertTriangle } from "lucide-react";
 import type { CertificadoAdmin } from "@/lib/admin";
-import { excluirCertificado, buscarCertificadosParaAdmin } from "@/lib/adminActions";
+import { excluirCertificado, buscarCertificadosParaAdmin, apagarTudoCertificados } from "@/lib/adminActions";
 import { formatarDataBr } from "@/lib/embarques";
+
+const PALAVRA_CONFIRMACAO = "APAGAR TUDO";
+
+function BotaoApagarTudo() {
+  const router = useRouter();
+  const [aberto, setAberto] = useState(false);
+  const [digitado, setDigitado] = useState("");
+  const [apagando, setApagando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [feito, setFeito] = useState(false);
+
+  const apagar = async () => {
+    setErro(null);
+    setApagando(true);
+    const resultado = await apagarTudoCertificados();
+    setApagando(false);
+    if (!resultado.sucesso) {
+      setErro(resultado.erro);
+      return;
+    }
+    setAberto(false);
+    setDigitado("");
+    setFeito(true);
+    router.refresh();
+  };
+
+  if (!aberto) {
+    return (
+      <div className="border border-vermelho/30 bg-vermelho/5 rounded-lg p-4 mb-5">
+        <div className="flex items-start gap-3">
+          <AlertTriangle size={18} className="text-vermelho shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-navy">Apagar tudo de Certificados (pra reimportar)</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Apaga TODOS os colaboradores, tipos, certificados lançados e numeração NR/PE da nuvem - use antes de
+              reimportar planilhas atualizadas da Angélica. Não mexe no histórico de auditoria.
+            </p>
+            {feito && <p className="text-xs text-verde font-semibold mt-1">✔ Apagado - pronto pra reimportar.</p>}
+          </div>
+          <button
+            type="button"
+            onClick={() => setAberto(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-vermelho border border-vermelho/40 rounded-md px-3 py-1.5 hover:bg-vermelho/10 transition-colors cursor-pointer"
+          >
+            <Trash2 size={13} /> Apagar tudo
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-vermelho/40 bg-vermelho/5 rounded-lg p-4 mb-5 space-y-2">
+      <p className="text-sm font-semibold text-vermelho">
+        Isso apaga TODOS os certificados, colaboradores, tipos e numeração NR/PE da nuvem - não tem como desfazer.
+      </p>
+      <p className="text-xs text-gray-600">
+        O banco local do desktop de cada instalação não é afetado - se alguém sincronizar o desktop antes do
+        reimport novo estar pronto, os dados antigos voltam. Melhor reimportar logo em seguida.
+      </p>
+      {erro && <p className="text-sm text-vermelho">{erro}</p>}
+      <p className="text-xs text-gray-500">
+        Digite <strong>{PALAVRA_CONFIRMACAO}</strong> pra confirmar:
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={digitado}
+          onChange={(ev) => setDigitado(ev.target.value)}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-vermelho focus:ring-2 focus:ring-vermelho/20"
+        />
+        <button
+          type="button"
+          onClick={apagar}
+          disabled={digitado !== PALAVRA_CONFIRMACAO || apagando}
+          className="bg-vermelho text-white text-xs font-semibold px-3 py-2 rounded-md hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+        >
+          {apagando ? "Apagando..." : "Confirmar e apagar tudo"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setAberto(false); setDigitado(""); setErro(null); }}
+          className="text-xs font-semibold text-gray-500 hover:text-navy cursor-pointer"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function PainelCertificadosAdmin() {
   const [busca, setBusca] = useState("");
@@ -48,6 +139,7 @@ export function PainelCertificadosAdmin() {
 
   return (
     <div>
+      <BotaoApagarTudo />
       <div className="relative w-full max-w-sm mb-3">
         <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input

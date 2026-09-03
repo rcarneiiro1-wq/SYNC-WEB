@@ -21,6 +21,8 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
+  Hash,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -38,9 +40,18 @@ const ITENS_EMBARQUE: ItemMenu[] = [
 // resto do sistema (ainda não migrado pro web) - continua "em breve"
 const ITENS_EM_BREVE: { rotulo: string; icone: React.ElementType }[] = [
   { rotulo: "RDO", icone: FileText },
-  { rotulo: "Certificados", icone: Award },
   { rotulo: "Relatórios gerais", icone: BarChart3 },
   { rotulo: "Configurações", icone: Settings },
+];
+
+// módulo de Certificados (03/09) - só aparece pra quem tem a permissão
+// "certificados" no cadastro (ou admin, que tem tudo), igual o desktop.
+const ITENS_CERTIFICADOS: ItemMenu[] = [
+  { rotulo: "Painel de vencimentos", href: "/certificados", icone: Award },
+  { rotulo: "Lançar certificado", href: "/certificados/lancar", icone: FileText },
+  { rotulo: "Colaboradores", href: "/certificados/colaboradores", icone: Users },
+  { rotulo: "Tipos de certificado", href: "/certificados/tipos", icone: ClipboardList },
+  { rotulo: "Numeração NR/PE", href: "/certificados/numeracao", icone: Hash },
 ];
 
 const VERSAO_SISTEMA = "Sync ERP v2.10.23";
@@ -115,11 +126,13 @@ export function Sidebar({
   funcao,
   sair,
   ehAdmin,
+  temAcessoCertificados,
 }: {
   nome: string;
   funcao?: string;
   sair: () => Promise<void>;
   ehAdmin?: boolean;
+  temAcessoCertificados?: boolean;
 }) {
   const pathname = usePathname();
   const [sobreAberto, setSobreAberto] = useState(false);
@@ -163,6 +176,27 @@ export function Sidebar({
             );
           })}
         </GrupoMenu>
+
+        {temAcessoCertificados && (
+          <GrupoMenu titulo="Certificados" abertoPorPadrao={false}>
+            {ITENS_CERTIFICADOS.map((item) => {
+              const Icone = item.icone;
+              const ativo = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                    ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <Icone size={18} className="shrink-0" />
+                  <span>{item.rotulo}</span>
+                </Link>
+              );
+            })}
+          </GrupoMenu>
+        )}
 
         <GrupoMenu titulo="Em construção" abertoPorPadrao={false}>
           {ITENS_EM_BREVE.map((item) => {

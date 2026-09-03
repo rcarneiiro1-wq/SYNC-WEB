@@ -51,6 +51,7 @@ export async function entrar(formData: FormData) {
     nome: linha.nome,
     ehAdmin: Boolean(linha.eh_admin),
     funcao: linha.funcao || undefined,
+    permissoes,
   });
   const jar = await cookies();
   jar.set(NOME_COOKIE_USUARIO, cookieValor, {

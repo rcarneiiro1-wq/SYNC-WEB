@@ -14,44 +14,49 @@ type Cartao = {
   notaSeDesabilitado?: string;
 };
 
-const CARTOES: Cartao[] = [
-  {
-    titulo: "Criar RDO",
-    descricao: "Preencha e registre o relatório diário de obra.",
-    icone: FileText,
-    corIcone: "#3D6FA6",
-    corFundoIcone: "#E8F0F9",
-    notaSeDesabilitado: "Disponível no aplicativo desktop (funciona offline, embarcado)",
-  },
-  {
-    titulo: "Gerar Relatório de Embarque",
-    descricao: "Emita relatórios detalhados dos embarques e desembarques.",
-    icone: FileText,
-    corIcone: "#c07a12",
-    corFundoIcone: "#FBF0DF",
-    notaSeDesabilitado: "Em construção",
-  },
-  {
-    titulo: "Gerenciamento de Certificados",
-    descricao: "Acompanhe validade, vencimentos e lançamentos de certificados.",
-    icone: Award,
-    corIcone: "#3d7a3d",
-    corFundoIcone: "#E8F5E8",
-    notaSeDesabilitado: "Em breve nessa área",
-  },
-  {
-    titulo: "Gerenciamento de Embarques",
-    descricao: "Visualize pessoas embarcadas e histórico de embarques.",
-    icone: Ship,
-    corIcone: "#6a4fb0",
-    corFundoIcone: "#EEE9F9",
-    href: "/embarques",
-  },
-];
+function construirCartoes(temAcessoCertificados: boolean): Cartao[] {
+  return [
+    {
+      titulo: "Criar RDO",
+      descricao: "Preencha e registre o relatório diário de obra.",
+      icone: FileText,
+      corIcone: "#3D6FA6",
+      corFundoIcone: "#E8F0F9",
+      notaSeDesabilitado: "Disponível no aplicativo desktop (funciona offline, embarcado)",
+    },
+    {
+      titulo: "Gerar Relatório de Embarque",
+      descricao: "Emita relatórios detalhados dos embarques e desembarques.",
+      icone: FileText,
+      corIcone: "#c07a12",
+      corFundoIcone: "#FBF0DF",
+      notaSeDesabilitado: "Em construção",
+    },
+    {
+      titulo: "Gerenciamento de Certificados",
+      descricao: "Acompanhe validade, vencimentos e lançamentos de certificados.",
+      icone: Award,
+      corIcone: "#3d7a3d",
+      corFundoIcone: "#E8F5E8",
+      href: temAcessoCertificados ? "/certificados" : undefined,
+      notaSeDesabilitado: temAcessoCertificados ? undefined : "Sem acesso liberado pra essa área",
+    },
+    {
+      titulo: "Gerenciamento de Embarques",
+      descricao: "Visualize pessoas embarcadas e histórico de embarques.",
+      icone: Ship,
+      corIcone: "#6a4fb0",
+      corFundoIcone: "#EEE9F9",
+      href: "/embarques",
+    },
+  ];
+}
 
 export default async function PaginaInicial() {
   const jar = await cookies();
   const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  const temAcessoCertificados = Boolean(sessao?.ehAdmin) || Boolean(sessao?.permissoes?.includes("certificados"));
+  const cartoes = construirCartoes(temAcessoCertificados);
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-14 flex flex-col items-center">
@@ -63,7 +68,7 @@ export default async function PaginaInicial() {
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
-        {CARTOES.map((c) => (
+        {cartoes.map((c) => (
           <CartaoNavegacao key={c.titulo} cartao={c} />
         ))}
       </div>

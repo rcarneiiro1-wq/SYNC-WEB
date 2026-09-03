@@ -18,7 +18,13 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar nome={sessao.nome} funcao={sessao.funcao} sair={sair} ehAdmin={sessao.ehAdmin} />
+      <Sidebar
+        nome={sessao.nome}
+        funcao={sessao.funcao}
+        sair={sair}
+        ehAdmin={sessao.ehAdmin}
+        temAcessoCertificados={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("certificados"))}
+      />
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   );

@@ -16,6 +16,10 @@ export type SessaoUsuario = {
   nome: string;
   ehAdmin: boolean;
   funcao?: string;
+  /** Chaves iguais ao desktop (tabela usuarios.permissoes) - controla o
+   * que aparece/funciona pra cada pessoa, ex: "certificados". Admin
+   * sempre tem tudo, então quase todo lugar confere `ehAdmin || permissoes.includes(...)`. */
+  permissoes: string[];
 };
 
 /** A chave de assinatura é a própria service_role key - já é um segredo
