@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ShieldAlert, Ship, Building2, Users, Award } from "lucide-react";
+import Link from "next/link";
+import { ShieldAlert, Ship, Building2, Users, Award, UserPlus } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { buscarEmbarquesAdmin, buscarObrasAdmin, buscarUsuariosAdmin } from "@/lib/admin";
 import { PainelEmbarquesAdmin } from "@/components/admin/PainelEmbarquesAdmin";
@@ -58,9 +59,21 @@ export default async function PaginaAdmin() {
       </section>
 
       <section className="mt-10">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
-          <Users size={16} /> Usuários
-        </h2>
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide">
+            <Users size={16} /> Usuários
+          </h2>
+          <Link
+            href="/admin/usuarios"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-azul hover:text-azul-escuro transition-colors"
+          >
+            <UserPlus size={13} /> Cadastro completo de usuários
+          </Link>
+        </div>
+        <p className="text-xs text-gray-400 -mt-2 mb-3">
+          Essa lista aqui embaixo é só uma visão rápida (excluir direto). Pra criar, editar dados/acessos ou anexar
+          assinatura, usa o &quot;Cadastro completo&quot; acima.
+        </p>
         <PainelUsuariosAdmin usuarios={usuarios} usuarioLogado={sessao.usuario} />
       </section>
 

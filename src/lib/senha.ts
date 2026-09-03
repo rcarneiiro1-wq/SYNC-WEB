@@ -27,3 +27,18 @@ export function verificarSenha(senhaDigitada: string, hashHex: string, saltHex: 
     return false;
   }
 }
+
+/**
+ * Gera um hash novo (salt aleatório de 16 bytes + PBKDF2, mesma fórmula
+ * de `verificarSenha`/do desktop `_hash_senha`) - usado ao criar um
+ * usuário novo ou trocar a senha de um existente pelo site. Se essa
+ * fórmula algum dia divergir da do desktop, as duas pontas passam a
+ * aceitar senhas diferentes uma da outra - por isso NUNCA mudar os
+ * parâmetros (100_000 iterações, sha256, salt de 16 bytes) sem trocar
+ * dos dois lados ao mesmo tempo.
+ */
+export function gerarHashSenha(senha: string): { hash: string; salt: string } {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivado = crypto.pbkdf2Sync(senha, Buffer.from(salt, "hex"), 100_000, 32, "sha256");
+  return { hash: derivado.toString("hex"), salt };
+}
