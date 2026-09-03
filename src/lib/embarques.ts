@@ -37,6 +37,7 @@ export type Obra = {
   local_flotel: string | null;
   local_codigo: string | null;
   gm_codigo: string | null;
+  md_codigo: string | null;
   prefixo_rdo: string | null;
   data_desembarque_prevista: string | null;
 };
@@ -417,7 +418,7 @@ const COLUNAS_EMBARQUES =
   "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
   "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em";
 const COLUNAS_OBRAS =
-  "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo";
+  "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo, md_codigo";
 const COLUNAS_RDOS =
   "id::text, embarque_id::text, numero_rdo, data, local_atuacao, status, arquivo_pdf_url, avanco_json, " +
   "avanco_percentual, descricao, justificativa_percentual, atualizado_em, referencias_dia_json";

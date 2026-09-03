@@ -89,7 +89,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
               </div>
             )}
 
-            {referencias.length > 0 && (
+            {referencias.length > 0 ? (
               <div className="mt-3">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                   Referências da obra (GM / MD / SS / WO)
@@ -112,6 +112,30 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
                   ))}
                 </div>
               </div>
+            ) : (
+              (obra?.gm_codigo || obra?.md_codigo) && (
+                // fallback pro cadastro antigo (campo fixo de GM/MD na obra),
+                // pra quando a obra não usa o cadastro novo de "referências"
+                // (obra_referencias) - assim o painel sempre mostra alguma
+                // coisa, mesmo em obra cadastrada do jeito antigo
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Referências da obra
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {obra?.gm_codigo && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-azul/10 text-azul whitespace-nowrap">
+                        GM - {obra.gm_codigo}
+                      </span>
+                    )}
+                    {obra?.md_codigo && (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-azul/10 text-azul whitespace-nowrap">
+                        MD - {obra.md_codigo}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
             )}
           </div>
 
