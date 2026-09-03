@@ -82,6 +82,40 @@ export async function excluirEmbarque(embarqueId: string): Promise<ResultadoAdmi
   return { sucesso: true };
 }
 
+/** Apaga uma obra (plataforma/projeto) que não tem mais uso - lixo de
+ * teste, duplicata, etc. Só deixa excluir se NENHUM embarque estiver
+ * apontando pra ela (`obra_id`) - diferente de `excluirEmbarque`, não
+ * faz cascata pra baixo: se tem embarque vinculado, quem exclui esses
+ * embarques primeiro é a seção Embarques acima, de propósito (excluir
+ * uma obra nunca deve levar embarque de verdade junto por engano). */
+export async function excluirObra(obraId: string): Promise<ResultadoAdmin> {
+  try {
+    await exigirAdmin();
+  } catch (e) {
+    return { sucesso: false, erro: e instanceof Error ? e.message : "Acesso negado." };
+  }
+  if (!obraId) return { sucesso: false, erro: "Obra não identificada." };
+
+  const admin = criarClienteAdmin();
+
+  const { count } = await admin.from("embarques").select("id", { count: "exact", head: true }).eq("obra_id", obraId);
+  if ((count ?? 0) > 0) {
+    return {
+      sucesso: false,
+      erro: `Essa obra ainda tem ${count} embarque(s) vinculado(s) - exclua (ou mova) os embarques primeiro, na seção Embarques acima.`,
+    };
+  }
+
+  await admin.from("obra_referencias").delete().eq("obra_id", obraId);
+  const { error } = await admin.from("obras").delete().eq("id", obraId);
+  if (error) return { sucesso: false, erro: `Não consegui excluir a obra: ${error.message}` };
+
+  revalidatePath("/admin");
+  revalidatePath("/relatorios");
+  revalidatePath("/historico");
+  return { sucesso: true };
+}
+
 /** Apaga um usuário do sistema (desktop + web, é a mesma tabela). Trava
  * duas situações perigosas: a pessoa se auto-excluir sem querer, e ficar
  * sem NENHUM admin sobrando (o que trancaria esse próprio painel). */

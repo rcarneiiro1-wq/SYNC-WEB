@@ -1,9 +1,10 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ShieldAlert, Ship, Users, Award } from "lucide-react";
+import { ShieldAlert, Ship, Building2, Users, Award } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
-import { buscarEmbarquesAdmin, buscarUsuariosAdmin } from "@/lib/admin";
+import { buscarEmbarquesAdmin, buscarObrasAdmin, buscarUsuariosAdmin } from "@/lib/admin";
 import { PainelEmbarquesAdmin } from "@/components/admin/PainelEmbarquesAdmin";
+import { PainelObrasAdmin } from "@/components/admin/PainelObrasAdmin";
 import { PainelUsuariosAdmin } from "@/components/admin/PainelUsuariosAdmin";
 import { PainelCertificadosAdmin } from "@/components/admin/PainelCertificadosAdmin";
 
@@ -22,7 +23,11 @@ export default async function PaginaAdmin() {
     redirect("/");
   }
 
-  const [embarques, usuarios] = await Promise.all([buscarEmbarquesAdmin(), buscarUsuariosAdmin()]);
+  const [embarques, obras, usuarios] = await Promise.all([
+    buscarEmbarquesAdmin(),
+    buscarObrasAdmin(),
+    buscarUsuariosAdmin(),
+  ]);
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-10">
@@ -43,6 +48,13 @@ export default async function PaginaAdmin() {
           <Ship size={16} /> Embarques
         </h2>
         <PainelEmbarquesAdmin embarques={embarques} />
+      </section>
+
+      <section className="mt-10">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
+          <Building2 size={16} /> Obras
+        </h2>
+        <PainelObrasAdmin obras={obras} />
       </section>
 
       <section className="mt-10">

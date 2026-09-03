@@ -89,6 +89,51 @@ export async function buscarUsuariosAdmin(): Promise<UsuarioAdmin[]> {
   );
 }
 
+export type ObraAdmin = {
+  id: string;
+  nome: string | null;
+  empresa: string | null;
+  localFlotel: string | null;
+  gmCodigo: string | null;
+  mdCodigo: string | null;
+  totalEmbarques: number;
+};
+
+/** Todas as obras cadastradas, com a contagem de embarques que apontam
+ * pra cada uma - é essa contagem que decide se dá pra excluir (ver
+ * `excluirObra` em adminActions.ts: só deixa excluir obra "órfã", sem
+ * nenhum embarque vinculado, pra nunca derrubar embarque nenhum junto
+ * por engano). */
+export async function buscarObrasAdmin(): Promise<ObraAdmin[]> {
+  const { data: obrasRaw, error } = await supabase
+    .from("obras")
+    .select("id::text, nome, empresa, local_flotel, gm_codigo, md_codigo")
+    .order("nome");
+  if (error) throw new Error(`Não consegui buscar as obras: ${error.message}`);
+  const obras = (obrasRaw || []) as unknown as {
+    id: string; nome: string | null; empresa: string | null; local_flotel: string | null;
+    gm_codigo: string | null; md_codigo: string | null;
+  }[];
+  if (obras.length === 0) return [];
+
+  const { data: embarquesRaw } = await supabase.from("embarques").select("obra_id::text");
+  const totalPorObra = new Map<string, number>();
+  for (const e of (embarquesRaw || []) as unknown as { obra_id: string | null }[]) {
+    if (!e.obra_id) continue;
+    totalPorObra.set(e.obra_id, (totalPorObra.get(e.obra_id) || 0) + 1);
+  }
+
+  return obras.map((o) => ({
+    id: o.id,
+    nome: o.nome,
+    empresa: o.empresa,
+    localFlotel: o.local_flotel,
+    gmCodigo: o.gm_codigo,
+    mdCodigo: o.md_codigo,
+    totalEmbarques: totalPorObra.get(o.id) || 0,
+  }));
+}
+
 export type CertificadoAdmin = {
   id: string;
   colaboradorNome: string;
