@@ -1,5 +1,8 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { buscarEmbarquesAtivos, formatarDataBr, recadoDeHoje, type LinhaEmbarque } from "@/lib/embarques";
 import { BotaoImprimir } from "@/components/BotaoImprimir";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 export const dynamic = "force-dynamic";
 
@@ -107,6 +110,15 @@ export default async function PaginaRelatorioAvanco({
 }: {
   searchParams: Promise<ParametrosBusca>;
 }) {
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  if (!sessao) redirect("/login");
+  // 03/09: só quem tem "gerenciamento_embarques" (ou admin) - essa página
+  // é a versão pra imprimir/salvar PDF, aberta a partir do "Ver RDOs"
+  if (!sessao.ehAdmin && !sessao.permissoes?.includes("gerenciamento_embarques")) {
+    redirect("/");
+  }
+
   const params = await searchParams;
   const idsParam = params.ids;
   const idsTexto = Array.isArray(idsParam) ? idsParam[0] : idsParam;

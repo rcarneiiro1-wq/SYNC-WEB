@@ -1,3 +1,5 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   buscarEmbarquesFinalizados,
   buscarOpcoesFiltro,
@@ -7,6 +9,7 @@ import {
 } from "@/lib/embarques";
 import { TabelaHistorico } from "@/components/TabelaHistorico";
 import { FiltroHistorico } from "@/components/FiltroHistorico";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
 
@@ -25,6 +28,14 @@ export default async function PaginaHistorico({
 }: {
   searchParams: Promise<ParametrosBusca>;
 }) {
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  if (!sessao) redirect("/login");
+  // 03/09: só quem tem "gerenciamento_embarques" (ou admin)
+  if (!sessao.ehAdmin && !sessao.permissoes?.includes("gerenciamento_embarques")) {
+    redirect("/");
+  }
+
   const params = await searchParams;
 
   // "empresa" pode aparecer repetido na URL (um card selecionado = um

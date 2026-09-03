@@ -108,12 +108,14 @@ export function Sidebar({
   funcao,
   sair,
   ehAdmin,
+  temAcessoEmbarques,
   temAcessoCertificados,
 }: {
   nome: string;
   funcao?: string;
   sair: () => Promise<void>;
   ehAdmin?: boolean;
+  temAcessoEmbarques?: boolean;
   temAcessoCertificados?: boolean;
 }) {
   const pathname = usePathname();
@@ -140,23 +142,31 @@ export function Sidebar({
           <span>Início</span>
         </Link>
 
-        <TituloSecao titulo="Gerenciamento de embarque" />
-        {ITENS_EMBARQUE.map((item) => {
-          const Icone = item.icone;
-          const ativo = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Icone size={18} className="shrink-0" />
-              <span>{item.rotulo}</span>
-            </Link>
-          );
-        })}
+        {/* 03/09: passou a checar a permissão "gerenciamento_embarques" de
+            verdade (antes essa seção aparecia pra QUALQUER usuário com
+            acesso ao site, mesmo alguém como a Angélica que só devia ter
+            Certificados) - mesmo esquema já usado abaixo pra Certificados */}
+        {temAcessoEmbarques && (
+          <>
+            <TituloSecao titulo="Gerenciamento de embarque" />
+            {ITENS_EMBARQUE.map((item) => {
+              const Icone = item.icone;
+              const ativo = pathname === item.href;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                    ativo ? "bg-azul text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <Icone size={18} className="shrink-0" />
+                  <span>{item.rotulo}</span>
+                </Link>
+              );
+            })}
+          </>
+        )}
 
         {temAcessoCertificados && (
           <>

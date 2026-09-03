@@ -14,7 +14,7 @@ type Cartao = {
   notaSeDesabilitado?: string;
 };
 
-function construirCartoes(temAcessoCertificados: boolean): Cartao[] {
+function construirCartoes(temAcessoCertificados: boolean, temAcessoEmbarques: boolean): Cartao[] {
   return [
     {
       titulo: "Criar RDO",
@@ -47,7 +47,8 @@ function construirCartoes(temAcessoCertificados: boolean): Cartao[] {
       icone: Ship,
       corIcone: "#6a4fb0",
       corFundoIcone: "#EEE9F9",
-      href: "/embarques",
+      href: temAcessoEmbarques ? "/embarques" : undefined,
+      notaSeDesabilitado: temAcessoEmbarques ? undefined : "Sem acesso liberado pra essa área",
     },
   ];
 }
@@ -56,7 +57,12 @@ export default async function PaginaInicial() {
   const jar = await cookies();
   const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
   const temAcessoCertificados = Boolean(sessao?.ehAdmin) || Boolean(sessao?.permissoes?.includes("certificados"));
-  const cartoes = construirCartoes(temAcessoCertificados);
+  // 03/09: antes esse card era liberado pra QUALQUER pessoa logada, mesmo
+  // sem a permissão "gerenciamento_embarques" - mesmo bug corrigido na
+  // Sidebar (ver Sidebar.tsx)
+  const temAcessoEmbarques =
+    Boolean(sessao?.ehAdmin) || Boolean(sessao?.permissoes?.includes("gerenciamento_embarques"));
+  const cartoes = construirCartoes(temAcessoCertificados, temAcessoEmbarques);
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-14 flex flex-col items-center">

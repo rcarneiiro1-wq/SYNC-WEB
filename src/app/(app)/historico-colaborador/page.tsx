@@ -1,8 +1,11 @@
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   buscarEmbarquesFinalizados, buscarNomesTodosColaboradores, type LinhaHistorico, type FiltrosHistorico,
 } from "@/lib/embarques";
 import { TabelaHistorico } from "@/components/TabelaHistorico";
 import { FiltroColaborador } from "@/components/FiltroColaborador";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
 
@@ -18,6 +21,14 @@ export default async function PaginaHistoricoColaborador({
 }: {
   searchParams: Promise<ParametrosBusca>;
 }) {
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  if (!sessao) redirect("/login");
+  // 03/09: só quem tem "gerenciamento_embarques" (ou admin)
+  if (!sessao.ehAdmin && !sessao.permissoes?.includes("gerenciamento_embarques")) {
+    redirect("/");
+  }
+
   const params = await searchParams;
   const colaborador = _texto(params.colaborador);
   const dataInicio = _texto(params.dataInicio);

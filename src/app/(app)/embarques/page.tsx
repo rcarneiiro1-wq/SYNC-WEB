@@ -1,5 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { Users, History, BarChart3 } from "lucide-react";
+import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 const CARTOES = [
   {
@@ -22,7 +25,17 @@ const CARTOES = [
   },
 ];
 
-export default function PaginaGerenciamentoEmbarques() {
+export default async function PaginaGerenciamentoEmbarques() {
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  if (!sessao) redirect("/login");
+  // 03/09: só quem tem a permissão "gerenciamento_embarques" (ou admin) -
+  // antes essa área toda aparecia pra QUALQUER pessoa com acesso ao site,
+  // mesmo alguém como a Angélica que só devia ter Certificados
+  if (!sessao.ehAdmin && !sessao.permissoes?.includes("gerenciamento_embarques")) {
+    redirect("/");
+  }
+
   return (
     <main className="max-w-5xl mx-auto px-6 py-10">
       <h1 className="text-xl font-bold text-navy mb-1">Gerenciamento de Embarques</h1>

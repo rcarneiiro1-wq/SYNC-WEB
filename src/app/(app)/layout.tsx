@@ -23,6 +23,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         funcao={sessao.funcao}
         sair={sair}
         ehAdmin={sessao.ehAdmin}
+        temAcessoEmbarques={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("gerenciamento_embarques"))}
         temAcessoCertificados={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("certificados"))}
       />
       <div className="flex-1 min-w-0">{children}</div>
