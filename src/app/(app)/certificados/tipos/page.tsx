@@ -4,6 +4,7 @@ import { ClipboardList } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { buscarTiposCertificado } from "@/lib/certificados";
 import { PainelTipos } from "@/components/certificados/PainelTipos";
+import { BotaoAjuda } from "@/components/BotaoAjuda";
 
 /** Equivalente à aba "Tipos de Certificado" do desktop (`AbaTiposCertificado`):
  * o catálogo de tipos (nome, carga horária, validade, categoria - a
@@ -18,14 +19,20 @@ export default async function PaginaTiposCertificado() {
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-10">
-      <div className="flex items-center gap-3 mb-1">
-        <div className="w-10 h-10 rounded-full bg-azul/10 text-azul flex items-center justify-center shrink-0">
-          <ClipboardList size={20} />
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-azul/10 text-azul flex items-center justify-center shrink-0">
+            <ClipboardList size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-navy">Tipos de certificado</h1>
+            <p className="text-sm text-gray-500">O catálogo usado pra lançar certificados - nome, carga horária, validade e categoria.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-navy">Tipos de certificado</h1>
-          <p className="text-sm text-gray-500">O catálogo usado pra lançar certificados - nome, carga horária, validade e categoria.</p>
-        </div>
+        <BotaoAjuda
+          titulo="Tipos de certificado"
+          texto="Cada tipo cadastrado aqui vira uma opção ao lançar um certificado - a validade em anos é usada para calcular o vencimento automaticamente."
+        />
       </div>
 
       <PainelTipos tiposIniciais={tipos} />

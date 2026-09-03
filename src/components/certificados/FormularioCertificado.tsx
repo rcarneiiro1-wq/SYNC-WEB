@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Info } from "lucide-react";
 import type { Colaborador, TipoCertificado, CertificadoLista } from "@/lib/certificados";
 import { calcularVencimentoSugerido } from "@/lib/certificados";
 import { salvarCertificado } from "@/lib/certificadosActions";
@@ -85,60 +86,61 @@ export function FormularioCertificado({
   };
 
   return (
-    <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+    <form onSubmit={salvar} className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-5">
       {erro && <p className="text-sm text-vermelho">{erro}</p>}
 
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 mb-1">Colaborador *</label>
-        <select
-          required
-          value={colaboradorId}
-          onChange={(ev) => setColaboradorId(ev.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
-        >
-          <option value="">Selecione...</option>
-          {colaboradores.map((c) => (
-            <option key={c.id} value={c.id}>{c.nome}{c.empresa ? ` (${c.empresa})` : ""}</option>
-          ))}
-        </select>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Colaborador *</label>
+          <select
+            required
+            value={colaboradorId}
+            onChange={(ev) => setColaboradorId(ev.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+          >
+            <option value="">Selecione...</option>
+            {colaboradores.map((c) => (
+              <option key={c.id} value={c.id}>{c.nome}{c.empresa ? ` (${c.empresa})` : ""}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Tipo de certificado *</label>
+          <select
+            required
+            value={tipoId}
+            onChange={(ev) => aoMudarTipo(ev.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+          >
+            <option value="">Selecione...</option>
+            {tipos.map((t) => (
+              <option key={t.id} value={t.id}>{t.categoria ? `[${t.categoria}] ` : ""}{t.nome}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Empresa (se for diferente da do colaborador)</label>
+          <input
+            type="text"
+            value={empresa}
+            onChange={(ev) => setEmpresa(ev.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+          />
+        </div>
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 mb-1">Tipo de certificado *</label>
-        <select
-          required
-          value={tipoId}
-          onChange={(ev) => aoMudarTipo(ev.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
-        >
-          <option value="">Selecione...</option>
-          {tipos.map((t) => (
-            <option key={t.id} value={t.id}>{t.categoria ? `[${t.categoria}] ` : ""}{t.nome}</option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 mb-1">Empresa (se for diferente da do colaborador)</label>
-        <input
-          type="text"
-          value={empresa}
-          onChange={(ev) => setEmpresa(ev.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
-        />
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-gray-500 mb-1">Número do certificado</label>
-        <input
-          type="text"
-          value={numero}
-          onChange={(ev) => setNumero(ev.target.value)}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
-        />
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Número do certificado</label>
+          <input
+            type="text"
+            value={numero}
+            onChange={(ev) => setNumero(ev.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+          />
+        </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">Data de emissão</label>
           <input
@@ -163,15 +165,21 @@ export function FormularioCertificado({
             }}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
           />
-          <p className="text-[11px] text-gray-400 mt-1">preenchido sozinho pela validade do tipo - pode ajustar</p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pt-2">
+      <div className="bg-azul/5 border border-azul/20 rounded-xl p-4 flex gap-2.5">
+        <Info size={16} className="text-azul shrink-0 mt-0.5" />
+        <p className="text-xs text-azul/90 leading-relaxed">
+          A data de vencimento é preenchida sozinha com base na validade do tipo escolhido - pode ajustar manualmente a qualquer momento.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
         <button
           type="submit"
           disabled={salvando}
-          className="bg-azul text-white text-sm font-semibold px-5 py-2.5 rounded-md hover:bg-azul/90 transition-colors disabled:opacity-50 cursor-pointer"
+          className="bg-azul text-white text-sm font-semibold px-5 py-2.5 rounded-md hover:bg-azul/90 transition-colors disabled:opacity-50 cursor-pointer mt-4"
         >
           {salvando ? "Salvando..." : certificadoExistente ? "Salvar alterações" : "Lançar certificado"}
         </button>

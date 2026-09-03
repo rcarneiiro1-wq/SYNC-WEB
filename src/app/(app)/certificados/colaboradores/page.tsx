@@ -4,6 +4,7 @@ import { Users } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { buscarColaboradores } from "@/lib/certificados";
 import { PainelColaboradores } from "@/components/certificados/PainelColaboradores";
+import { BotaoAjuda } from "@/components/BotaoAjuda";
 
 /** Equivalente à aba "Colaboradores" do desktop (`AbaColaboradores`):
  * cadastro de pessoas, lista com busca, mesclar cadastros duplicados e
@@ -18,14 +19,20 @@ export default async function PaginaColaboradores() {
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10">
-      <div className="flex items-center gap-3 mb-1">
-        <div className="w-10 h-10 rounded-full bg-azul/10 text-azul flex items-center justify-center shrink-0">
-          <Users size={20} />
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-azul/10 text-azul flex items-center justify-center shrink-0">
+            <Users size={20} />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-navy">Colaboradores</h1>
+            <p className="text-sm text-gray-500">Cadastro de pessoas usado pra lançar certificados.</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-navy">Colaboradores</h1>
-          <p className="text-sm text-gray-500">Cadastro de pessoas usado pra lançar certificados.</p>
-        </div>
+        <BotaoAjuda
+          titulo="Colaboradores"
+          texto="Cadastros duplicados podem ser mesclados diretamente na lista, sem perder o histórico de certificados da pessoa."
+        />
       </div>
 
       <PainelColaboradores colaboradoresIniciais={colaboradores} />

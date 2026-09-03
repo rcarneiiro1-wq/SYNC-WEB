@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Info, Search } from "lucide-react";
 import type { Colaborador, ItemNumeracao } from "@/lib/certificados";
 import { excluirNumeracao, salvarNumeracao } from "@/lib/certificadosActions";
+import { Paginacao } from "@/components/Paginacao";
 
 function aplicarMascaraData(valor: string): string {
   const digitos = valor.replace(/\D/g, "").slice(0, 8);
@@ -34,6 +35,8 @@ export function PainelNumeracao({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
 
   const proximoNumero = categoria === "NR" ? proximoNumeroNr : proximoNumeroPe;
 
@@ -81,9 +84,22 @@ export function PainelNumeracao({
     ? itensIniciais.filter((i) => (i.colaboradorNome || "").toLowerCase().includes(termo) || (i.descricao || "").toLowerCase().includes(termo))
     : itensIniciais;
 
+  const [termoAnterior, setTermoAnterior] = useState(termo);
+  if (termo !== termoAnterior) {
+    setTermoAnterior(termo);
+    setPagina(1);
+  }
+
+  const paginados = useMemo(
+    () => filtrados.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina),
+    [filtrados, pagina, itensPorPagina]
+  );
+
   return (
     <div>
-      <form onSubmit={lancar} className="bg-white border border-gray-200 rounded-xl p-5 mt-6 mb-6 space-y-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 mt-6 mb-6 items-start">
+      <form onSubmit={lancar} className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-3">
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Registrar NR/PE emitida</p>
         {erro && <p className="text-sm text-vermelho">{erro}</p>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
@@ -154,15 +170,29 @@ export function PainelNumeracao({
         </button>
       </form>
 
-      <input
-        type="text"
-        value={busca}
-        onChange={(ev) => setBusca(ev.target.value)}
-        placeholder="🔍 Pesquisar por colaborador ou descrição..."
-        className="w-full max-w-sm rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 mb-3"
-      />
+      <div className="bg-azul/5 border border-azul/20 rounded-xl p-4 flex gap-2.5">
+        <Info size={16} className="text-azul shrink-0 mt-0.5" />
+        <p className="text-xs text-azul/90 leading-relaxed">
+          <strong>Como funciona:</strong> toda vez que você clicar em &quot;Lançar&quot;, o número da sequência (NR ou PE) sobe sozinho - nunca repete e nunca pula.
+        </p>
+      </div>
+      </div>
 
-      <div className="overflow-x-auto border border-gray-100 rounded-lg">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+          <div className="relative max-w-sm w-full">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(ev) => setBusca(ev.target.value)}
+              placeholder="Pesquisar por colaborador ou descrição..."
+              className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+            />
+          </div>
+          <p className="text-xs text-gray-400 whitespace-nowrap">{filtrados.length} registro(s)</p>
+        </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
@@ -180,7 +210,7 @@ export function PainelNumeracao({
                 <td colSpan={6} className="px-3 py-6 text-center text-gray-400">Nenhum item encontrado.</td>
               </tr>
             )}
-            {filtrados.map((i) => (
+            {paginados.map((i) => (
               <tr key={i.id} className="hover:bg-gray-50">
                 <td className="px-3 py-2 font-medium text-navy">{i.categoria} {i.numero}</td>
                 <td className="px-3 py-2 text-gray-600">{i.descricao || "-"}</td>
@@ -201,6 +231,16 @@ export function PainelNumeracao({
             ))}
           </tbody>
         </table>
+        </div>
+        <div className="border-t border-gray-100">
+          <Paginacao
+            total={filtrados.length}
+            pagina={pagina}
+            itensPorPagina={itensPorPagina}
+            aoMudarPagina={setPagina}
+            aoMudarItensPorPagina={(n) => { setItensPorPagina(n); setPagina(1); }}
+          />
+        </div>
       </div>
     </div>
   );

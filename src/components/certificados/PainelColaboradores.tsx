@@ -1,11 +1,12 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, X, GitMerge, History } from "lucide-react";
+import { Pencil, Plus, X, GitMerge, History, Search } from "lucide-react";
 import type { Colaborador, HistoricoCertificado } from "@/lib/certificados";
 import { buscarHistoricoColaborador } from "@/lib/certificados";
 import { mesclarColaboradores, salvarColaborador } from "@/lib/certificadosActions";
+import { Paginacao } from "@/components/Paginacao";
 
 function FormularioColaborador({
   colaborador,
@@ -241,9 +242,24 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [mesclandoId, setMesclandoId] = useState<string | null>(null);
   const [historicoDe, setHistoricoDe] = useState<Colaborador | null>(null);
+  const [pagina, setPagina] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
 
   const termo = busca.trim().toLowerCase();
   const filtrados = termo ? colaboradoresIniciais.filter((c) => c.nome.toLowerCase().includes(termo)) : colaboradoresIniciais;
+
+  // volta pra página 1 quando a busca muda, senão a pessoa pode ficar
+  // "presa" numa página que não existe mais depois de filtrar
+  const [termoAnterior, setTermoAnterior] = useState(termo);
+  if (termo !== termoAnterior) {
+    setTermoAnterior(termo);
+    setPagina(1);
+  }
+
+  const paginados = useMemo(
+    () => filtrados.slice((pagina - 1) * itensPorPagina, pagina * itensPorPagina),
+    [filtrados, pagina, itensPorPagina]
+  );
 
   const fechar = () => {
     setCriando(false);
@@ -254,30 +270,42 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
 
   return (
     <div>
-      <div className="flex items-center gap-3 mt-6 mb-4">
-        <input
-          type="text"
-          value={busca}
-          onChange={(ev) => setBusca(ev.target.value)}
-          placeholder="🔍 Pesquisar por nome..."
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
-        />
-        {!criando && (
-          <button
-            type="button"
-            onClick={() => { setCriando(true); setEditandoId(null); setMesclandoId(null); }}
-            className="inline-flex items-center gap-1.5 bg-azul text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-azul/90 transition-colors whitespace-nowrap"
-          >
-            <Plus size={15} /> Novo colaborador
-          </button>
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mt-6 mb-5">
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(ev) => setBusca(ev.target.value)}
+              placeholder="Pesquisar por nome..."
+              className="w-full rounded-md border border-gray-300 pl-9 pr-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+            />
+          </div>
+          {!criando && (
+            <button
+              type="button"
+              onClick={() => { setCriando(true); setEditandoId(null); setMesclandoId(null); }}
+              className="inline-flex items-center gap-1.5 bg-azul text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-azul/90 transition-colors whitespace-nowrap"
+            >
+              <Plus size={15} /> Novo colaborador
+            </button>
+          )}
+        </div>
+
+        {criando && (
+          <div className="mt-4">
+            <FormularioColaborador colaborador={null} aoCancelar={() => setCriando(false)} aoSalvar={fechar} />
+          </div>
         )}
       </div>
 
-      {criando && <FormularioColaborador colaborador={null} aoCancelar={() => setCriando(false)} aoSalvar={fechar} />}
-
-      <p className="text-xs text-gray-400 mb-2">{filtrados.length} colaborador(es)</p>
-
-      <div className="overflow-x-auto border border-gray-100 rounded-lg">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+          <p className="text-sm font-semibold text-navy">Colaboradores cadastrados</p>
+          <p className="text-xs text-gray-400">{filtrados.length} colaborador(es)</p>
+        </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-left text-xs text-gray-500 uppercase tracking-wide">
@@ -294,7 +322,7 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                 <td colSpan={5} className="px-3 py-6 text-center text-gray-400">Nenhum colaborador encontrado.</td>
               </tr>
             )}
-            {filtrados.map((c) => (
+            {paginados.map((c) => (
               <Fragment key={c.id}>
                 <tr className="hover:bg-gray-50">
                   <td className="px-3 py-2 font-medium text-navy">{c.nome}</td>
@@ -350,6 +378,16 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
             ))}
           </tbody>
         </table>
+        </div>
+        <div className="border-t border-gray-100">
+          <Paginacao
+            total={filtrados.length}
+            pagina={pagina}
+            itensPorPagina={itensPorPagina}
+            aoMudarPagina={setPagina}
+            aoMudarItensPorPagina={(n) => { setItensPorPagina(n); setPagina(1); }}
+          />
+        </div>
       </div>
 
       {historicoDe && <ModalHistorico colaborador={historicoDe} aoFechar={() => setHistoricoDe(null)} />}
