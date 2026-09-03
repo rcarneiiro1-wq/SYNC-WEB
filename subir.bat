@@ -6,6 +6,9 @@ echo   Subindo as mudancas do site pro GitHub
 echo ==========================================
 echo.
 
+git config gc.auto 0
+git config core.safecrlf false
+
 git add -A
 git commit -m "Atualizacao %date% %time%"
 git push origin main
