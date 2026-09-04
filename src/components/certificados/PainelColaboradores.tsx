@@ -9,6 +9,11 @@ import { mesclarColaboradores, salvarColaborador, vincularUsuarioColaborador } f
 import { buscarUsuariosParaVinculo, type UsuarioParaVinculo } from "@/lib/usuarios";
 import { Paginacao } from "@/components/Paginacao";
 
+// mesmo padrão de EMPRESA_PADRAO já usado em CadastroUsuarios.tsx - evita
+// colaborador novo nascer com "Empresa" em branco de novo (todos os 82 já
+// cadastrados foram preenchidos com isso em 04/09, ver estado-atual.md).
+const EMPRESA_PADRAO = "MF Máquinas";
+
 function FormularioColaborador({
   colaborador,
   aoCancelar,
@@ -20,7 +25,7 @@ function FormularioColaborador({
 }) {
   const [nome, setNome] = useState(colaborador?.nome || "");
   const [cpf, setCpf] = useState(colaborador?.cpf || "");
-  const [empresa, setEmpresa] = useState(colaborador?.empresa || "");
+  const [empresa, setEmpresa] = useState(colaborador?.empresa || EMPRESA_PADRAO);
   const [localTrabalho, setLocalTrabalho] = useState(colaborador?.localTrabalho || "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);

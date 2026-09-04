@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { buscarUsuariosCompleto } from "@/lib/usuarios";
+import { buscarColaboradores } from "@/lib/certificados";
 import { CadastroUsuarios } from "@/components/admin/CadastroUsuarios";
 
 /** Tela completa de "Cadastro de Usuários" - cadastro/edição (dados,
@@ -20,7 +21,12 @@ export default async function PaginaCadastroUsuarios() {
     redirect("/");
   }
 
-  const usuarios = await buscarUsuariosCompleto();
+  // colaboradores(false) traz todos, inclusive inativos - importante pro
+  // painel de vínculo conseguir MOSTRAR um vínculo existente com um
+  // colaborador que porventura esteja inativo, mesmo só oferecendo os
+  // ativos como opção pra vincular um novo (ver `colaboradoresDisponiveis`
+  // em CadastroUsuarios.tsx).
+  const [usuarios, colaboradores] = await Promise.all([buscarUsuariosCompleto(), buscarColaboradores(false)]);
 
   return (
     <main className="max-w-6xl mx-auto px-6 py-10">
@@ -30,7 +36,7 @@ export default async function PaginaCadastroUsuarios() {
       >
         <ArrowLeft size={13} /> Voltar para usuários
       </Link>
-      <CadastroUsuarios usuarios={usuarios} />
+      <CadastroUsuarios usuarios={usuarios} colaboradores={colaboradores} />
     </main>
   );
 }

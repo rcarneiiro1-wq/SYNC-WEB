@@ -16,10 +16,14 @@ import {
   Power,
   Paperclip,
   FileSignature,
+  Link2,
+  Unlink,
 } from "lucide-react";
 import { excluirUsuario } from "@/lib/adminActions";
 import { salvarUsuario, definirAtivoUsuario, salvarAssinaturaUsuario } from "@/lib/usuariosActions";
+import { vincularUsuarioColaborador } from "@/lib/certificadosActions";
 import { SISTEMAS_PERMISSAO, type UsuarioCompleto } from "@/lib/usuarios";
+import type { Colaborador } from "@/lib/certificados";
 
 const ITENS_POR_PAGINA = 5;
 const EMPRESA_PADRAO = "MF Máquinas";
@@ -90,7 +94,13 @@ function rotuloAcessos(u: UsuarioCompleto): string {
  * numa coluna cada, com a lista de usuários embaixo). Reaproveita as
  * mesmas 5 permissões e a mesma regra de senha/login do desktop - só o
  * layout é novo, pra ficar no padrão do resto do site. */
-export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) {
+export function CadastroUsuarios({
+  usuarios,
+  colaboradores,
+}: {
+  usuarios: UsuarioCompleto[];
+  colaboradores: Colaborador[];
+}) {
   const router = useRouter();
   const [pendente, iniciarTransicao] = useTransition();
   const inputAssinaturaRef = useRef<HTMLInputElement>(null);
@@ -107,7 +117,60 @@ export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) 
   const [busca, setBusca] = useState("");
   const [pagina, setPagina] = useState(0);
 
+  // ---------- vínculo com Cadastro de Colaboradores (Certificados) ----------
+  const [mostrarVinculo, setMostrarVinculo] = useState(false);
+  const [buscaColaborador, setBuscaColaborador] = useState("");
+  const [colaboradorEscolhido, setColaboradorEscolhido] = useState("");
+  const [vinculando, setVinculando] = useState(false);
+
   const editando = Boolean(form.usuarioOriginal);
+  // procura pelo login ORIGINAL (não `form.usuario`, que já pode estar
+  // sendo editado na tela antes de salvar) - senão o vínculo "some" da
+  // tela assim que a pessoa começa a digitar um login novo.
+  const colaboradorVinculado = editando
+    ? colaboradores.find((c) => c.usuarioLogin === form.usuarioOriginal) || null
+    : null;
+  const colaboradoresDisponiveis = colaboradores.filter((c) => c.ativo && !c.usuarioLogin);
+  const termoBuscaColab = buscaColaborador.trim().toLowerCase();
+  const colaboradoresFiltrados = termoBuscaColab
+    ? colaboradoresDisponiveis.filter((c) => c.nome.toLowerCase().includes(termoBuscaColab))
+    : colaboradoresDisponiveis;
+
+  function fecharPainelVinculo() {
+    setMostrarVinculo(false);
+    setBuscaColaborador("");
+    setColaboradorEscolhido("");
+  }
+
+  async function handleVincularColaborador() {
+    if (!colaboradorEscolhido || !form.usuarioOriginal) return;
+    setErro(null);
+    setVinculando(true);
+    const resultado = await vincularUsuarioColaborador(colaboradorEscolhido, form.usuarioOriginal);
+    setVinculando(false);
+    if (!resultado.sucesso) {
+      setErro(resultado.erro);
+      return;
+    }
+    fecharPainelVinculo();
+    setMensagem("Vínculo com o colaborador criado.");
+    router.refresh();
+  }
+
+  async function handleDesvincularColaborador() {
+    if (!colaboradorVinculado) return;
+    if (!window.confirm(`Desvincular "${form.nome}" do colaborador "${colaboradorVinculado.nome}"?`)) return;
+    setErro(null);
+    setVinculando(true);
+    const resultado = await vincularUsuarioColaborador(colaboradorVinculado.id, null);
+    setVinculando(false);
+    if (!resultado.sucesso) {
+      setErro(resultado.erro);
+      return;
+    }
+    setMensagem("Vínculo com o colaborador removido.");
+    router.refresh();
+  }
 
   const usuariosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -120,6 +183,14 @@ export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) 
     );
   }, [usuarios, busca]);
 
+  // pra mostrar um selinho na linha de cada usuário já vinculado, sem
+  // precisar abrir o formulário pra descobrir
+  const nomeColaboradorPorLogin = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const c of colaboradores) if (c.usuarioLogin) mapa.set(c.usuarioLogin, c.nome);
+    return mapa;
+  }, [colaboradores]);
+
   const totalPaginas = Math.max(1, Math.ceil(usuariosFiltrados.length / ITENS_POR_PAGINA));
   const paginaAtual = Math.min(pagina, totalPaginas - 1);
   const inicio = paginaAtual * ITENS_POR_PAGINA;
@@ -129,12 +200,14 @@ export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) 
     setForm(formularioVazio());
     setErro(null);
     setMensagem(null);
+    fecharPainelVinculo();
   }
 
   function carregarUsuario(u: UsuarioCompleto) {
     setForm(formularioDoUsuario(u));
     setErro(null);
     setMensagem(null);
+    fecharPainelVinculo();
   }
 
   async function handleSalvar() {
@@ -296,6 +369,70 @@ export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) 
                   className={classesInput}
                 />
               </Campo>
+              {editando && (
+                <div className="rounded-lg border border-azul/20 bg-azul/5 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-navy mb-1.5">Colaborador vinculado (Certificados)</p>
+                  {colaboradorVinculado ? (
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-azul bg-white px-2 py-1 rounded-full border border-azul/20">
+                        <Link2 size={11} /> {colaboradorVinculado.nome}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleDesvincularColaborador}
+                        disabled={vinculando}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-vermelho hover:underline cursor-pointer disabled:opacity-50"
+                      >
+                        <Unlink size={12} /> Desvincular
+                      </button>
+                    </div>
+                  ) : mostrarVinculo ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={buscaColaborador}
+                        onChange={(e) => { setBuscaColaborador(e.target.value); setColaboradorEscolhido(""); }}
+                        placeholder="Buscar pelo nome..."
+                        className={classesInput + " bg-white"}
+                      />
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={colaboradorEscolhido}
+                          onChange={(e) => setColaboradorEscolhido(e.target.value)}
+                          className={classesInput + " bg-white flex-1"}
+                        >
+                          <option value="">
+                            {colaboradoresFiltrados.length === 0 ? "Nenhum nome encontrado..." : "Selecione o colaborador..."}
+                          </option>
+                          {colaboradoresFiltrados.map((c) => (
+                            <option key={c.id} value={c.id}>{c.nome}{c.empresa ? ` (${c.empresa})` : ""}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={handleVincularColaborador}
+                          disabled={vinculando || !colaboradorEscolhido}
+                          className="inline-flex items-center gap-1 rounded-md bg-azul px-3 py-2 text-xs font-semibold text-white hover:bg-azul/90 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        >
+                          <Link2 size={12} /> {vinculando ? "..." : "Vincular"}
+                        </button>
+                        <button type="button" onClick={fecharPainelVinculo} className="text-xs font-semibold text-gray-500 hover:text-navy cursor-pointer">
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setMostrarVinculo(true)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-azul hover:underline cursor-pointer"
+                    >
+                      <Link2 size={12} /> Vincular a um colaborador do Cadastro de Colaboradores
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="E-mail">
                   <input
@@ -513,7 +650,12 @@ export function CadastroUsuarios({ usuarios }: { usuarios: UsuarioCompleto[] }) 
                   className={`cursor-pointer hover:bg-gray-50 ${!u.ativo ? "opacity-50" : ""}`}
                 >
                   <td className="px-3 py-2 text-gray-600">{u.usuario}</td>
-                  <td className="px-3 py-2 font-medium text-navy">{u.nome}</td>
+                  <td className="px-3 py-2 font-medium text-navy">
+                    {u.nome}
+                    {nomeColaboradorPorLogin.has(u.usuario) && (
+                      <Link2 size={11} className="inline-block ml-1.5 -mt-0.5 text-azul" />
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">{u.funcao || "-"}</td>
                   <td className="px-3 py-2 text-gray-600 max-w-xs truncate">{rotuloAcessos(u)}</td>
                   <td className="px-3 py-2">
