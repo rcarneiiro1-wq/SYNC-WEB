@@ -2,10 +2,11 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, X, GitMerge, History, Search } from "lucide-react";
+import { Pencil, Plus, X, GitMerge, History, Search, Link2, Unlink } from "lucide-react";
 import type { Colaborador, HistoricoCertificado } from "@/lib/certificados";
 import { buscarHistoricoColaborador } from "@/lib/certificados";
-import { mesclarColaboradores, salvarColaborador } from "@/lib/certificadosActions";
+import { mesclarColaboradores, salvarColaborador, vincularUsuarioColaborador } from "@/lib/certificadosActions";
+import { buscarUsuariosParaVinculo, type UsuarioParaVinculo } from "@/lib/usuarios";
 import { Paginacao } from "@/components/Paginacao";
 
 function FormularioColaborador({
@@ -119,6 +120,12 @@ function LinhaMesclar({
   const [duplicadoId, setDuplicadoId] = useState("");
   const [mesclando, setMesclando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [buscaDuplicado, setBuscaDuplicado] = useState("");
+
+  const termoBusca = buscaDuplicado.trim().toLowerCase();
+  const outrosFiltrados = termoBusca
+    ? outros.filter((o) => o.nome.toLowerCase().includes(termoBusca))
+    : outros;
 
   const mesclar = async () => {
     if (!duplicadoId) {
@@ -146,14 +153,28 @@ function LinhaMesclar({
       <p className="text-sm text-gray-600">
         Mesclar um cadastro duplicado <strong>dentro de {colaborador.nome}</strong> - escolha qual é o duplicado (ele vai ficar arquivado, e os certificados dele passam pra cá):
       </p>
+      <input
+        type="text"
+        value={buscaDuplicado}
+        onChange={(ev) => {
+          setBuscaDuplicado(ev.target.value);
+          setDuplicadoId("");
+        }}
+        placeholder="Buscar pelo nome..."
+        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+      />
       <div className="flex items-center gap-3">
         <select
           value={duplicadoId}
           onChange={(ev) => setDuplicadoId(ev.target.value)}
           className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
         >
-          <option value="">Selecione o cadastro duplicado...</option>
-          {outros.map((o) => (
+          <option value="">
+            {outrosFiltrados.length === 0
+              ? "Nenhum nome encontrado..."
+              : "Selecione o cadastro duplicado..."}
+          </option>
+          {outrosFiltrados.map((o) => (
             <option key={o.id} value={o.id}>{o.nome}{o.empresa ? ` (${o.empresa})` : ""}</option>
           ))}
         </select>
@@ -169,6 +190,128 @@ function LinhaMesclar({
           Cancelar
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Liga (ou tira) o vínculo do colaborador com um login de `usuarios` -
+ * sempre por escolha manual na lista (nunca automático por nome batendo,
+ * mesmo cuidado do `LinhaMesclar` acima - já vimos nomes parecidos que na
+ * verdade são pessoas diferentes). `usuariosDisponiveis` já vem filtrada
+ * (só quem ainda não está vinculado a NENHUM colaborador, ou é o vínculo
+ * atual deste aqui) - a constraint no banco impede de qualquer forma, isso
+ * aqui é só pra não nem oferecer uma opção que ia dar erro. */
+function LinhaVincular({
+  colaborador,
+  usuariosDisponiveis,
+  aoCancelar,
+  aoConcluir,
+}: {
+  colaborador: Colaborador;
+  usuariosDisponiveis: UsuarioParaVinculo[];
+  aoCancelar: () => void;
+  aoConcluir: () => void;
+}) {
+  const [usuarioEscolhido, setUsuarioEscolhido] = useState(colaborador.usuarioLogin || "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [buscaUsuario, setBuscaUsuario] = useState("");
+
+  const termoBusca = buscaUsuario.trim().toLowerCase();
+  const usuariosFiltrados = termoBusca
+    ? usuariosDisponiveis.filter((u) => u.nome.toLowerCase().includes(termoBusca) || u.usuario.toLowerCase().includes(termoBusca))
+    : usuariosDisponiveis;
+
+  const vincular = async () => {
+    if (!usuarioEscolhido) {
+      setErro("Escolha o usuário.");
+      return;
+    }
+    setErro(null);
+    setSalvando(true);
+    const resultado = await vincularUsuarioColaborador(colaborador.id, usuarioEscolhido);
+    setSalvando(false);
+    if (!resultado.sucesso) {
+      setErro(resultado.erro);
+      return;
+    }
+    aoConcluir();
+  };
+
+  const desvincular = async () => {
+    if (!window.confirm(`Desvincular "${colaborador.nome}" do usuário "${colaborador.usuarioLogin}"?`)) return;
+    setErro(null);
+    setSalvando(true);
+    const resultado = await vincularUsuarioColaborador(colaborador.id, null);
+    setSalvando(false);
+    if (!resultado.sucesso) {
+      setErro(resultado.erro);
+      return;
+    }
+    aoConcluir();
+  };
+
+  return (
+    <div className="bg-azul/5 border border-azul/30 rounded-lg p-4 space-y-2">
+      {erro && <p className="text-sm text-vermelho">{erro}</p>}
+      {colaborador.usuarioLogin ? (
+        <>
+          <p className="text-sm text-gray-600">
+            <strong>{colaborador.nome}</strong> já está vinculado ao usuário <strong>{colaborador.usuarioLogin}</strong>.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={desvincular}
+              disabled={salvando}
+              className="inline-flex items-center gap-1.5 bg-vermelho text-white text-sm font-semibold px-4 py-2 rounded-md hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+            >
+              <Unlink size={14} /> {salvando ? "Desvinculando..." : "Desvincular"}
+            </button>
+            <button type="button" onClick={aoCancelar} className="text-sm font-semibold text-gray-500 hover:text-navy cursor-pointer">
+              Cancelar
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-600">
+            Vincular <strong>{colaborador.nome}</strong> a um login já cadastrado em Usuários (mesma pessoa que já tem acesso ao sistema):
+          </p>
+          <input
+            type="text"
+            value={buscaUsuario}
+            onChange={(ev) => { setBuscaUsuario(ev.target.value); setUsuarioEscolhido(""); }}
+            placeholder="Buscar pelo nome ou login..."
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+          />
+          <div className="flex items-center gap-3">
+            <select
+              value={usuarioEscolhido}
+              onChange={(ev) => setUsuarioEscolhido(ev.target.value)}
+              className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+            >
+              <option value="">
+                {usuariosFiltrados.length === 0 ? "Nenhum usuário encontrado..." : "Selecione o usuário..."}
+              </option>
+              {usuariosFiltrados.map((u) => (
+                <option key={u.usuario} value={u.usuario}>{u.nome} ({u.usuario})</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={vincular}
+              disabled={salvando}
+              className="inline-flex items-center gap-1.5 bg-azul text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-azul/90 transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
+            >
+              <Link2 size={14} /> {salvando ? "Vinculando..." : "Vincular"}
+            </button>
+            <button type="button" onClick={aoCancelar} className="text-sm font-semibold text-gray-500 hover:text-navy cursor-pointer">
+              Cancelar
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -241,9 +384,20 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
   const [criando, setCriando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [mesclandoId, setMesclandoId] = useState<string | null>(null);
+  const [vinculandoId, setVinculandoId] = useState<string | null>(null);
   const [historicoDe, setHistoricoDe] = useState<Colaborador | null>(null);
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
+
+  // lista de usuários pra oferecer no "Vincular usuário" - carregada uma vez
+  // só (não é por colaborador), filtrada na hora de exibir.
+  const [usuarios, setUsuarios] = useState<UsuarioParaVinculo[]>([]);
+  useEffect(() => {
+    buscarUsuariosParaVinculo().then(setUsuarios).catch(() => {
+      // best-effort - se falhar, o "Vincular" só mostra a lista vazia,
+      // não trava o resto da tela
+    });
+  }, []);
 
   const termo = busca.trim().toLowerCase();
   const filtrados = termo ? colaboradoresIniciais.filter((c) => c.nome.toLowerCase().includes(termo)) : colaboradoresIniciais;
@@ -265,8 +419,16 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
     setCriando(false);
     setEditandoId(null);
     setMesclandoId(null);
+    setVinculandoId(null);
     router.refresh();
   };
+
+  /** ids de usuário já vinculados a ALGUM colaborador - usado só pra não
+   * oferecer no dropdown alguém que já está vinculado em outra linha (a
+   * constraint no banco garante isso de qualquer jeito, isso aqui é só UX). */
+  const loginsJaVinculados = new Set(
+    colaboradoresIniciais.map((c) => c.usuarioLogin).filter((l): l is string => !!l)
+  );
 
   return (
     <div>
@@ -313,13 +475,14 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
               <th className="px-3 py-2 font-semibold">CPF</th>
               <th className="px-3 py-2 font-semibold">Empresa</th>
               <th className="px-3 py-2 font-semibold">Regime</th>
+              <th className="px-3 py-2 font-semibold">Usuário</th>
               <th className="px-3 py-2 font-semibold text-right">Ação</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-gray-400">Nenhum colaborador encontrado.</td>
+                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">Nenhum colaborador encontrado.</td>
               </tr>
             )}
             {paginados.map((c) => (
@@ -329,6 +492,15 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                   <td className="px-3 py-2 text-gray-600">{c.cpf || "-"}</td>
                   <td className="px-3 py-2 text-gray-600">{c.empresa || "-"}</td>
                   <td className="px-3 py-2 text-gray-600">{c.localTrabalho || "-"}</td>
+                  <td className="px-3 py-2">
+                    {c.usuarioLogin ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-azul bg-azul/10 px-2 py-1 rounded-full">
+                        <Link2 size={11} /> {c.usuarioLogin}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">-</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <div className="inline-flex items-center gap-3">
                       <button
@@ -340,14 +512,21 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setMesclandoId(mesclandoId === c.id ? null : c.id); setCriando(false); setEditandoId(null); }}
+                        onClick={() => { setVinculandoId(vinculandoId === c.id ? null : c.id); setCriando(false); setEditandoId(null); setMesclandoId(null); }}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-azul hover:underline cursor-pointer"
+                      >
+                        <Link2 size={13} /> {c.usuarioLogin ? "Usuário" : "Vincular"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setMesclandoId(mesclandoId === c.id ? null : c.id); setCriando(false); setEditandoId(null); setVinculandoId(null); }}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-amarelo hover:underline cursor-pointer"
                       >
                         <GitMerge size={13} /> Mesclar
                       </button>
                       <button
                         type="button"
-                        onClick={() => { setEditandoId(c.id); setCriando(false); setMesclandoId(null); }}
+                        onClick={() => { setEditandoId(c.id); setCriando(false); setMesclandoId(null); setVinculandoId(null); }}
                         className="inline-flex items-center gap-1 text-xs font-semibold text-azul hover:underline cursor-pointer"
                       >
                         <Pencil size={13} /> Editar
@@ -357,18 +536,30 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                 </tr>
                 {editandoId === c.id && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-3">
+                    <td colSpan={6} className="px-3 py-3">
                       <FormularioColaborador colaborador={c} aoCancelar={() => setEditandoId(null)} aoSalvar={fechar} />
                     </td>
                   </tr>
                 )}
                 {mesclandoId === c.id && (
                   <tr>
-                    <td colSpan={5} className="px-3 py-3">
+                    <td colSpan={6} className="px-3 py-3">
                       <LinhaMesclar
                         colaborador={c}
                         outros={colaboradoresIniciais.filter((o) => o.id !== c.id)}
                         aoCancelar={() => setMesclandoId(null)}
+                        aoConcluir={fechar}
+                      />
+                    </td>
+                  </tr>
+                )}
+                {vinculandoId === c.id && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-3">
+                      <LinhaVincular
+                        colaborador={c}
+                        usuariosDisponiveis={usuarios.filter((u) => u.ativo && !loginsJaVinculados.has(u.usuario))}
+                        aoCancelar={() => setVinculandoId(null)}
                         aoConcluir={fechar}
                       />
                     </td>

@@ -52,7 +52,16 @@ export type Colaborador = {
   cpf: string | null;
   empresa: string | null;
   localTrabalho: string | null;
+  /** @deprecated coluna antiga, hardcoded `false` desde sempre - a verdade
+   * agora é `usuarioLogin !== null`. Mantida só porque o payload de sync do
+   * desktop ainda manda esse campo (não sincroniza usuarioLogin, então não
+   * tem risco de o desktop sobrescrever o vínculo). */
   ehUsuarioSistema: boolean;
+  /** Login vinculado em `usuarios` (ver `vincularUsuarioColaborador` em
+   * certificadosActions.ts) - `null` quando não há vínculo. Vínculo é
+   * opcional e por escolha manual, nunca automático por nome batendo (ver
+   * "DESENHO DEFINIDO" no estado-atual.md pro histórico da decisão). */
+  usuarioLogin: string | null;
   ativo: boolean;
   criadoEm: string | null;
 };
@@ -60,20 +69,21 @@ export type Colaborador = {
 type ColaboradorRaw = {
   id: string; nome: string; cpf: string | null; empresa: string | null;
   local_trabalho: string | null; eh_usuario_sistema: boolean | null; ativo: boolean | null;
-  criado_em: string | null;
+  criado_em: string | null; usuario_login: string | null;
 };
 
 function converterColaborador(c: ColaboradorRaw): Colaborador {
   return {
     id: c.id, nome: c.nome, cpf: c.cpf, empresa: c.empresa, localTrabalho: c.local_trabalho,
-    ehUsuarioSistema: Boolean(c.eh_usuario_sistema), ativo: c.ativo !== false, criadoEm: c.criado_em,
+    ehUsuarioSistema: Boolean(c.eh_usuario_sistema), usuarioLogin: c.usuario_login,
+    ativo: c.ativo !== false, criadoEm: c.criado_em,
   };
 }
 
 export async function buscarColaboradores(somenteAtivos = true): Promise<Colaborador[]> {
   let query = supabase
     .from("colaboradores")
-    .select("id::text, nome, cpf, empresa, local_trabalho, eh_usuario_sistema, ativo, criado_em")
+    .select("id::text, nome, cpf, empresa, local_trabalho, eh_usuario_sistema, ativo, criado_em, usuario_login")
     .order("nome");
   if (somenteAtivos) query = query.eq("ativo", true);
   const { data, error } = await query;

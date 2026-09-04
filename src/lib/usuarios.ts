@@ -64,10 +64,32 @@ function analisarPermissoes(json: string | null): string[] {
   }
 }
 
+export type UsuarioParaVinculo = { usuario: string; nome: string; ativo: boolean };
+
+/** Versão enxuta de `buscarUsuariosCompleto()` - só login/nome/ativo, sem
+ * email/telefone/função/empresa. Usada no picker de "Vincular usuário" do
+ * Cadastro de Colaboradores (`PainelColaboradores.tsx`), que roda no
+ * NAVEGADOR de quem tem só a permissão `certificados` (não precisa ser
+ * admin) - `buscarUsuariosCompleto()` não serve pra isso porque manda os
+ * dados pessoais de todo mundo pro cliente só pra montar um dropdown de
+ * nome+login (a tela de Cadastro de Usuários, essa sim admin-only, continua
+ * usando a versão completa). Nada disso é proteção de verdade contra
+ * acesso direto ao Supabase (RLS de `usuarios`/`colaboradores` está aberta
+ * pra `public` - ver nota no estado-atual.md), é só não passar dado sem
+ * necessidade pro JS do cliente numa tela que gente não-admin acessa. */
+export async function buscarUsuariosParaVinculo(): Promise<UsuarioParaVinculo[]> {
+  const { data, error } = await supabase.from("usuarios").select("usuario, nome, ativo").order("nome");
+  if (error) throw new Error(`Não consegui buscar os usuários: ${error.message}`);
+  return ((data || []) as unknown as UsuarioParaVinculo[]).map((u) => ({ ...u, ativo: u.ativo !== false }));
+}
+
 /** Lista completa de usuários (todos os campos, inclusive os novos
  * email/telefone/empresa e a assinatura) - usada pela tela de Cadastro
- * de Usuários (`/admin/usuarios`). Diferente de `buscarUsuariosAdmin`
- * (admin.ts), que só traz o básico pra listagem rápida do Painel Admin. */
+ * de Usuários (`/admin/usuarios`), que já é admin-only. Diferente de
+ * `buscarUsuariosAdmin` (admin.ts), que só traz o básico pra listagem
+ * rápida do Painel Admin. **Não usar em telas que não sejam admin-only**
+ * (ver `buscarUsuariosParaVinculo` acima pro caso comum de só precisar
+ * de login+nome). */
 export async function buscarUsuariosCompleto(): Promise<UsuarioCompleto[]> {
   const { data, error } = await supabase
     .from("usuarios")

@@ -133,9 +133,62 @@ export async function definirAtivoColaborador(colaboradorId: string, ativo: bool
   return { sucesso: true };
 }
 
+/** Liga (ou desliga, passando `null`) um colaborador a um login de
+ * `usuarios` - vínculo OPCIONAL e sempre por escolha manual (nunca
+ * automático por nome batendo, ver decisão registrada no estado-atual.md).
+ * A constraint `colaboradores_usuario_login_key` (unique) já impede dois
+ * colaboradores ligados ao mesmo usuário - a checagem aqui é só pra dar uma
+ * mensagem de erro legível em vez do erro cru do Postgres. */
+export async function vincularUsuarioColaborador(
+  colaboradorId: string,
+  usuarioLogin: string | null
+): Promise<ResultadoCertificados> {
+  let sessao: SessaoUsuario;
+  try {
+    sessao = await exigirAcessoCertificados();
+  } catch (e) {
+    return { sucesso: false, erro: e instanceof Error ? e.message : "Acesso negado." };
+  }
+  if (!colaboradorId) return { sucesso: false, erro: "Colaborador não identificado." };
+
+  const admin = criarClienteAdmin();
+  const { data: colaborador } = await admin.from("colaboradores").select("nome").eq("id", colaboradorId).maybeSingle();
+  if (!colaborador) return { sucesso: false, erro: "Colaborador não encontrado." };
+
+  if (usuarioLogin) {
+    const { data: usuario } = await admin.from("usuarios").select("nome").eq("usuario", usuarioLogin).maybeSingle();
+    if (!usuario) return { sucesso: false, erro: "Usuário não encontrado." };
+    const { data: jaVinculado } = await admin
+      .from("colaboradores").select("id, nome").eq("usuario_login", usuarioLogin).neq("id", colaboradorId).maybeSingle();
+    if (jaVinculado) {
+      return { sucesso: false, erro: `Esse usuário já está vinculado a "${jaVinculado.nome}".` };
+    }
+
+    const { error } = await admin.from("colaboradores").update({ usuario_login: usuarioLogin }).eq("id", colaboradorId);
+    if (error) return { sucesso: false, erro: `Não consegui vincular: ${error.message}` };
+    await registrarAuditoria(
+      admin, sessao.nome, "vinculou usuário ao colaborador", "colaborador", colaboradorId,
+      `Vinculado ao login "${usuarioLogin}" (${usuario.nome}).`
+    );
+  } else {
+    const { error } = await admin.from("colaboradores").update({ usuario_login: null }).eq("id", colaboradorId);
+    if (error) return { sucesso: false, erro: `Não consegui desvincular: ${error.message}` };
+    await registrarAuditoria(admin, sessao.nome, "desvinculou usuário do colaborador", "colaborador", colaboradorId);
+  }
+
+  revalidatePath("/certificados/colaboradores");
+  return { sucesso: true };
+}
+
 /** Junta dois cadastros duplicados: move certificados e numeração do
  * "remover" pro "manter", e arquiva o "remover" (não apaga - só marca
- * inativo). Mesma lógica de `mesclar_colaboradores()` do desktop. */
+ * inativo e guarda `mesclado_com_id`). Mesma lógica de
+ * `mesclar_colaboradores()` do desktop, mas rodando dentro da função
+ * `mesclar_colaboradores()` do Postgres (RPC) - assim as 3 escritas
+ * (certificados, numeração, arquivar) acontecem numa transação só e
+ * atômica: se qualquer uma falhar, TUDO volta atrás. Antes cada
+ * `.update()` era uma chamada HTTP separada pro PostgREST, sem
+ * garantia nenhuma de tudo-ou-nada, e 2 das 3 nem checavam erro. */
 export async function mesclarColaboradores(manterId: string, removerId: string): Promise<ResultadoCertificados> {
   let sessao: SessaoUsuario;
   try {
@@ -147,24 +200,22 @@ export async function mesclarColaboradores(manterId: string, removerId: string):
   if (manterId === removerId) return { sucesso: false, erro: "Não dá pra mesclar um colaborador com ele mesmo." };
 
   const admin = criarClienteAdmin();
-  const { data: removido } = await admin.from("colaboradores").select("nome").eq("id", removerId).maybeSingle();
-  const { data: mantido } = await admin.from("colaboradores").select("nome").eq("id", manterId).maybeSingle();
-  if (!removido || !mantido) return { sucesso: false, erro: "Um dos colaboradores não foi encontrado." };
-
-  const { count: qtdCert } = await admin
-    .from("certificados").select("id", { count: "exact", head: true }).eq("colaborador_id", removerId);
-  await admin.from("certificados").update({ colaborador_id: manterId }).eq("colaborador_id", removerId);
-
-  const { count: qtdNum } = await admin
-    .from("numeracao_certificados").select("id", { count: "exact", head: true }).eq("colaborador_id", removerId);
-  await admin.from("numeracao_certificados").update({ colaborador_id: manterId }).eq("colaborador_id", removerId);
-
-  const { error } = await admin.from("colaboradores").update({ ativo: false }).eq("id", removerId);
+  // ids sempre como texto - podem passar do limite seguro de Number em JS.
+  const { data, error } = await admin.rpc("mesclar_colaboradores", {
+    p_manter_id: manterId,
+    p_remover_id: removerId,
+  });
   if (error) return { sucesso: false, erro: `Não consegui mesclar: ${error.message}` };
 
-  const detalhes = `Mesclou "${removido.nome}" neste cadastro - ${qtdCert ?? 0} certificado(s) e ${qtdNum ?? 0} numeração(ões) movidos.`;
+  const resultado = data as {
+    certificados_movidos: number;
+    numeracao_movida: number;
+    manter_nome: string;
+    remover_nome: string;
+  };
+  const detalhes = `Mesclou "${resultado.remover_nome}" neste cadastro - ${resultado.certificados_movidos} certificado(s) e ${resultado.numeracao_movida} numeração(ões) movidos.`;
   await registrarAuditoria(admin, sessao.nome, "mesclou colaborador (recebeu)", "colaborador", manterId, detalhes);
-  await registrarAuditoria(admin, sessao.nome, "mesclou colaborador (arquivado)", "colaborador", removerId, `Arquivado - dados movidos pra "${mantido.nome}".`);
+  await registrarAuditoria(admin, sessao.nome, "mesclou colaborador (arquivado)", "colaborador", removerId, `Arquivado - dados movidos pra "${resultado.manter_nome}".`);
 
   revalidatePath("/certificados");
   revalidatePath("/certificados/colaboradores");
