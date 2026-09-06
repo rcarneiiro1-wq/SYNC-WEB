@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { criarClienteAdmin } from "@/lib/supabase-admin";
 import { verificarSenha } from "@/lib/senha";
 import { criarCookieSessao, NOME_COOKIE_USUARIO } from "@/lib/auth-usuario";
+import { registrarLoginHistorico } from "@/lib/historicoLogin";
 
 export async function entrar(formData: FormData) {
   const usuario = String(formData.get("usuario") || "").trim();
@@ -45,6 +46,8 @@ export async function entrar(formData: FormData) {
   if (!temAcessoWeb) {
     redirect(`/login?erro=sem_permissao&proximo=${encodeURIComponent(proximo)}`);
   }
+
+  await registrarLoginHistorico(linha.usuario, linha.nome);
 
   const cookieValor = await criarCookieSessao({
     usuario: linha.usuario,

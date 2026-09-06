@@ -134,6 +134,39 @@ export async function buscarObrasAdmin(): Promise<ObraAdmin[]> {
   }));
 }
 
+export type LoginHistoricoAdmin = {
+  usuario: string;
+  nome: string;
+  origem: string;
+  logadoEm: string;
+};
+
+/** Histórico só dos últimos N dias - tem que bater com o
+ * DIAS_RETENCAO_HISTORICO do core/presenca.py (desktop) e o
+ * DIAS_RETENCAO de lib/historicoLogin.ts (esse mesmo site), pra os três
+ * lados concordarem em até quando o histórico guarda login. */
+const DIAS_HISTORICO_LOGIN = 5;
+
+/** Quem logou (desktop + site) nos últimos DIAS_HISTORICO_LOGIN dias -
+ * tabela "historico_login", uma linha por login de verdade (diferente da
+ * "presenca", que só diz quem está online agora). Cada novo login já
+ * apaga sozinho (best-effort) o que passou da validade - ver
+ * lib/historicoLogin.ts e core/presenca.py no desktop - então essa
+ * busca aqui é só um filtro de segurança a mais, não é o que mantém a
+ * lista pequena. */
+export async function buscarHistoricoLoginAdmin(): Promise<LoginHistoricoAdmin[]> {
+  const limite = new Date(Date.now() - DIAS_HISTORICO_LOGIN * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from("historico_login")
+    .select("usuario, nome, origem, logado_em")
+    .gte("logado_em", limite)
+    .order("logado_em", { ascending: false });
+  if (error) throw new Error(`Não consegui buscar o histórico de login: ${error.message}`);
+  return ((data || []) as unknown as { usuario: string; nome: string; origem: string; logado_em: string }[]).map(
+    (l) => ({ usuario: l.usuario, nome: l.nome, origem: l.origem, logadoEm: l.logado_em })
+  );
+}
+
 export type CertificadoAdmin = {
   id: string;
   colaboradorNome: string;

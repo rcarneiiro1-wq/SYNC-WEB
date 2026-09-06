@@ -1,13 +1,16 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ShieldAlert, Ship, Building2, Users, Award, UserPlus } from "lucide-react";
+import { ShieldAlert, Ship, Building2, Users, Award, UserPlus, Clock } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
-import { buscarEmbarquesAdmin, buscarObrasAdmin, buscarUsuariosAdmin } from "@/lib/admin";
+import {
+  buscarEmbarquesAdmin, buscarObrasAdmin, buscarUsuariosAdmin, buscarHistoricoLoginAdmin,
+} from "@/lib/admin";
 import { PainelEmbarquesAdmin } from "@/components/admin/PainelEmbarquesAdmin";
 import { PainelObrasAdmin } from "@/components/admin/PainelObrasAdmin";
 import { PainelUsuariosAdmin } from "@/components/admin/PainelUsuariosAdmin";
 import { PainelCertificadosAdmin } from "@/components/admin/PainelCertificadosAdmin";
+import { PainelHistoricoLoginAdmin } from "@/components/admin/PainelHistoricoLoginAdmin";
 
 /** Painel do administrador - só o "admin" (ou quem tiver eh_admin=true)
  * enxerga essa página. Dá autonomia pra excluir DE VERDADE embarques de
@@ -24,10 +27,11 @@ export default async function PaginaAdmin() {
     redirect("/");
   }
 
-  const [embarques, obras, usuarios] = await Promise.all([
+  const [embarques, obras, usuarios, historicoLogin] = await Promise.all([
     buscarEmbarquesAdmin(),
     buscarObrasAdmin(),
     buscarUsuariosAdmin(),
+    buscarHistoricoLoginAdmin(),
   ]);
 
   return (
@@ -77,11 +81,18 @@ export default async function PaginaAdmin() {
         <PainelUsuariosAdmin usuarios={usuarios} usuarioLogado={sessao.usuario} />
       </section>
 
-      <section className="mt-10 mb-10">
+      <section className="mt-10">
         <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
           <Award size={16} /> Certificados
         </h2>
         <PainelCertificadosAdmin />
+      </section>
+
+      <section className="mt-10 mb-10">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
+          <Clock size={16} /> Histórico de login
+        </h2>
+        <PainelHistoricoLoginAdmin historico={historicoLogin} />
       </section>
     </main>
   );
