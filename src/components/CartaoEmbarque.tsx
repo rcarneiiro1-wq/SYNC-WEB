@@ -278,7 +278,12 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
             </span>
           )}
           {percentualDescasado && (
-            <span className="text-[10px] text-vermelho font-medium whitespace-nowrap">% não bate</span>
+            <span
+              className="text-[10px] text-vermelho font-medium whitespace-nowrap cursor-help"
+              title={`O % digitado no último RDO (${percentual}%) não bate com os itens marcados no checklist (${percentualPelosItens}% pelos itens). Provavelmente esqueceram de atualizar um item, ou digitaram o % geral errado.`}
+            >
+              ⚠ % não bate
+            </span>
           )}
         </div>
       </div>
@@ -350,14 +355,6 @@ export function CartaoEmbarque({ linha }: { linha: LinhaEmbarque }) {
           ⚠ O % de avanço acima é do último RDO sincronizado - com {rdosPendentes} dia
           {rdosPendentes === 1 ? "" : "s"} sem lançamento (comum com internet instável a bordo), pode não
           refletir a situação mais recente.
-        </div>
-      )}
-
-      {percentualDescasado && (
-        <div className="bg-vermelho/10 border border-vermelho/25 text-vermelho text-xs rounded-md px-3 py-2">
-          ⚠ O % digitado no último RDO ({percentual}%) não bate com os itens marcados no checklist
-          ({percentualPelosItens}% pelos itens). Provavelmente esqueceram de atualizar um item, ou digitaram o
-          % geral errado.
         </div>
       )}
 
