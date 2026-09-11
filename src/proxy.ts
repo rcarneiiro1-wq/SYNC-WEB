@@ -21,6 +21,21 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
     if (!pathname.startsWith("/api/")) {
       event.waitUntil(registrarNavegacao(sessao.usuario, sessao.nome, pathname));
     }
+
+    // 11/09: quem só tem "painel_colaborador" (sem ser admin, sem
+    // "acesso_web") NUNCA pode alcançar o resto do site de gerência -
+    // nem digitando a URL na mão. Essa é a trava principal (a segunda
+    // camada, mais fraca, fica em app/(app)/layout.tsx). Fica de fora
+    // dessa trava só a própria /meu-painel e as chamadas de /api que a
+    // página dela eventualmente precise.
+    const ehSoColaborador =
+      !sessao.ehAdmin &&
+      !sessao.permissoes?.includes("acesso_web") &&
+      Boolean(sessao.permissoes?.includes("painel_colaborador"));
+    if (ehSoColaborador && !pathname.startsWith("/meu-painel") && !pathname.startsWith("/api/")) {
+      return NextResponse.redirect(new URL("/meu-painel", request.url));
+    }
+
     return NextResponse.next();
   }
 
