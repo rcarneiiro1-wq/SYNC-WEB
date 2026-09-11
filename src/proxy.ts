@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, NextFetchEvent } from "next/server";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
+import { registrarNavegacao } from "@/lib/historicoNavegacao";
 
-export async function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
 
   // a própria página de login (e os recursos estáticos) não passam pela trava
@@ -13,6 +14,13 @@ export async function proxy(request: NextRequest) {
   const sessao = await validarCookieSessao(cookie);
 
   if (sessao) {
+    // 11/09: rastro de navegação pro Rafael (painel /admin, só ele vê) -
+    // não conta chamada de /api (download de arquivo etc.), só troca de
+    // tela de verdade. `event.waitUntil` deixa a gravação terminar em
+    // segundo plano, sem atrasar em nada a resposta pra quem tá navegando.
+    if (!pathname.startsWith("/api/")) {
+      event.waitUntil(registrarNavegacao(sessao.usuario, sessao.nome, pathname));
+    }
     return NextResponse.next();
   }
 
