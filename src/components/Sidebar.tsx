@@ -21,6 +21,7 @@ import {
   Hash,
   UserPlus,
   Menu,
+  User,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -220,6 +221,23 @@ export function Sidebar({
           <Link href="/" className={classeLink(pathname === "/")} onClick={() => setMenuAberto(false)}>
             <Home size={18} className="shrink-0" />
             <span>Início</span>
+          </Link>
+
+          {/* 12/09: atalho pro próprio Painel do Colaborador (/meu-painel),
+              a pedido do Rafael - ele também embarca e quis um jeito de ver
+              suas próprias diárias sem precisar deslogar/logar de novo.
+              Sem checagem de permissão aqui de propósito: quem clicar e não
+              tiver colaborador vinculado só vê a mensagem "ainda não
+              vinculado" (já tratada dentro do painel), não quebra nada. */}
+          <DivisorLateral />
+          <TituloSecao titulo="Pessoal" />
+          <Link
+            href="/meu-painel"
+            className={classeLink(pathname === "/meu-painel")}
+            onClick={() => setMenuAberto(false)}
+          >
+            <User size={18} className="shrink-0" />
+            <span>Meu painel</span>
           </Link>
 
           {/* 03/09: passou a checar a permissão "gerenciamento_embarques" de
