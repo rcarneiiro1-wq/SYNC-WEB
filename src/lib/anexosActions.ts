@@ -34,11 +34,23 @@ function gerarIdAnexo(): string {
   return `${agora}${sufixo}`;
 }
 
-/** Sobe um relatório/RDO assinado (o "relatório de embarque" manual, foto
- * ou scan) pro Storage do Supabase e registra a linha em `anexos_embarque`
- * - mesmo fluxo que o desktop faz em `anexar_arquivo_embarque()`. Usa o
- * cliente admin (service role) porque essa Server Action já roda só no
- * servidor - nunca expõe a chave pro navegador. */
+export const TIPOS_ANEXO = ["rdo", "relatorio_embarque"] as const;
+export type TipoAnexo = (typeof TIPOS_ANEXO)[number];
+
+/** Sobe um anexo manual (RDO escaneado ou Relatório de Embarque, assinado
+ * ou não) pro Storage do Supabase e registra a linha em `anexos_embarque`
+ * - mesmo fluxo que o desktop faz em `anexar_arquivo_embarque()`/
+ * `enviar_relatorio_embarque()`. Usa o cliente admin (service role) porque
+ * essa Server Action já roda só no servidor - nunca expõe a chave pro
+ * navegador.
+ *
+ * `tipo` ('rdo' ou 'relatorio_embarque') e `assinado` (sim/não) são
+ * escolhidos por quem faz o upload - combinado com o Rafael em 13/09:
+ * quando assinado=true, o arquivo vai pra subpasta ASSINADOS/ e aparece
+ * na área separada "Relatórios Assinados" (visível ao Geraldo, Uilian e
+ * Andréia); quando não, fica junto com os demais anexos gerais em "Anexos
+ * do Embarque". Isso NUNCA se aplica ao PDF de RDO que sobe sozinho depois
+ * de gerado (outro mecanismo, veja `enviarPdfRdo`) - só ao upload manual. */
 export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoAnexo> {
   const nomeUsuario = await usuarioLogado();
   if (!nomeUsuario) {
@@ -47,6 +59,8 @@ export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoA
 
   const embarqueId = formData.get("embarqueId");
   const arquivo = formData.get("arquivo");
+  const tipoBruto = formData.get("tipo");
+  const assinadoBruto = formData.get("assinado");
 
   if (typeof embarqueId !== "string" || !embarqueId) {
     return { sucesso: false, erro: "Embarque não identificado." };
@@ -63,9 +77,16 @@ export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoA
     return { sucesso: false, erro: "Tipo de arquivo não permitido - usa PDF, JPG, PNG ou HEIC." };
   }
 
+  const tipo: TipoAnexo | null =
+    typeof tipoBruto === "string" && (TIPOS_ANEXO as readonly string[]).includes(tipoBruto)
+      ? (tipoBruto as TipoAnexo)
+      : null;
+  const assinado = assinadoBruto === "true" || assinadoBruto === "on";
+
   const anexoId = gerarIdAnexo();
   const contentType = extensao === "pdf" ? "application/pdf" : `image/${extensao === "jpg" ? "jpeg" : extensao}`;
-  const caminhoNoBucket = `embarque_${embarqueId}/anexo_${anexoId}.${extensao}`;
+  const pasta = assinado ? `embarque_${embarqueId}/ASSINADOS` : `embarque_${embarqueId}`;
+  const caminhoNoBucket = `${pasta}/anexo_${anexoId}.${extensao}`;
 
   const admin = criarClienteAdmin();
   const bytes = await arquivo.arrayBuffer();
@@ -88,6 +109,8 @@ export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoA
     nome_arquivo: arquivo.name,
     url_nuvem: urlPublica.publicUrl,
     enviado_por: nomeUsuario,
+    tipo,
+    assinado,
   });
   if (erroInsert) {
     return { sucesso: false, erro: `O arquivo subiu, mas não consegui registrar: ${erroInsert.message}` };
