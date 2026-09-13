@@ -42,7 +42,7 @@ function ChipReferencia({ referencia }: { referencia: ReferenciaObra }) {
   );
 }
 
-/** Modal do botão "Ver RDOs" - no nível da janela "Histórico de RDOs" do
+/** Modal do botão "Ver RDO's" - no nível da janela "Histórico de RDOs" do
  * desktop: 3 cartõezinhos de estatística (Total de RDOs / Progresso total /
  * Última atualização), tabela de RDOs com seleção (checkbox + Selecionar
  * todos), Abrir/Baixar selecionado(s), e a seção de Relatórios assinados
