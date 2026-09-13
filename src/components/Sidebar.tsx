@@ -98,7 +98,7 @@ function ModalSobre({ aoFechar }: { aoFechar: () => void }) {
         </button>
         <Image src="/logo-syncerp.png" alt="Sync ERP" width={56} height={56} className="mx-auto mb-3" />
         <p className="font-bold text-navy">{VERSAO_SISTEMA}</p>
-        <p className="text-sm text-gray-500 mt-1">Desenvolvido por Rafael Carneiro</p>
+        <p className="text-sm text-gray-500 mt-1">Developed by Núcleo Sync</p>
         <p className="text-xs text-gray-400 mt-4">Sistema de gerenciamento de embarques offshore — MF Máquinas</p>
       </div>
     </div>
@@ -330,7 +330,7 @@ export function Sidebar({
           <p className="text-center text-[10px] text-gray-500 mt-2">
             {VERSAO_SISTEMA}
             <br />
-            Desenvolvido por Rafael Carneiro
+            Developed by Núcleo Sync
           </p>
         </div>
 
