@@ -6,13 +6,18 @@
 // exatamente esse erro de build que apareceu ao testar antes de entregar
 // (14/09): "server-only" não pode ser importado por um Client Component.
 
-export const CATEGORIAS_DOCUMENTO = ["isometricos", "pid", "plantas", "outros"] as const;
+// 14/09: categoria nova "mdgmsswo" a pedido do Rafael - um lugar pra
+// anexar os PDFs dos códigos de referência da plataforma (MD/GM/SS/WO -
+// cada plataforma normalmente só usa um desses tipos, mas todos entram
+// nessa mesma categoria de upload).
+export const CATEGORIAS_DOCUMENTO = ["isometricos", "pid", "plantas", "mdgmsswo", "outros"] as const;
 export type CategoriaDocumento = (typeof CATEGORIAS_DOCUMENTO)[number];
 
 export const ROTULO_CATEGORIA: Record<CategoriaDocumento, string> = {
   isometricos: "Isométricos",
   pid: "P&ID",
   plantas: "Plantas",
+  mdgmsswo: "MD/GM/SS/WO",
   outros: "Outros",
 };
 

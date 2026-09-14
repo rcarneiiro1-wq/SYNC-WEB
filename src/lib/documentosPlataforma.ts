@@ -28,51 +28,135 @@ const NOME_BUCKET_DOCUMENTOS = "documentos-plataforma";
 const VALIDADE_URL_SEGUNDOS = 60 * 60;
 
 export type Plataforma = {
+  // 14/09: NÃO é mais o `obra_id` cru - é o CÓDIGO normalizado da
+  // plataforma (ver `normalizarCodigo` abaixo). Mantido o nome do campo
+  // `obraId` só por compatibilidade com quem já lê `p.obraId`/`?obra=`,
+  // mas o valor agora é a "chave de grupo": pode representar 1 ou mais
+  // `obras.id` reais que são fisicamente a mesma plataforma (ex: cadastro
+  // duplicado "Almirante Tamandaré"/"Almirante Tamandare") - ver a
+  // explicação completa em `resolverGrupoPlataforma`.
   obraId: string;
   nome: string;
   empresa: string | null;
   totalEmbarques: number;
 };
 
+/** Normaliza o CÓDIGO da plataforma (`obras.local_codigo`) pra virar a
+ * chave de agrupamento: maiúsculo, sem acento, sem traço/espaço. 14/09,
+ * combinado com o Rafael depois de ele reportar "Almirante Barroso"
+ * duplicado e "Almirante Tamandaré"/"ATD" aparecendo como plataformas
+ * diferentes - MV-32/mv32/MV32 (ou ATD/Atd) têm que virar a MESMA chave.
+ * Conferido em produção (14/09) que isso não junta nenhum par que não
+ * devesse: hoje só existem 2 pares de código duplicado no cadastro
+ * (Barroso "MV-32"/"MV-32" e Tamandaré "ATD"/"Atd") e os dois pares são,
+ * de fato, a mesma plataforma física (mesma empresa também, conferido). */
+function normalizarCodigo(codigo: string | null | undefined): string {
+  if (!codigo) return "";
+  return codigo
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove acento
+    .toUpperCase()
+    .replace(/[\s-]/g, ""); // remove espaço e traço
+}
+
+/** Mesma ideia pro NOME, só pra exibição - maiúsculo e sem acento, igual
+ * combinado com o Rafael pra também valer no cadastro novo daqui pra
+ * frente (ver `AbaObras` no desktop). Isso também resolve, de graça, o
+ * caso de duas obras duplicadas com nome escrito diferente (ex:
+ * "ALMIRANTE BARROSO" vs "Almirante Barroso") sem precisar escolher qual
+ * dos dois "vence". */
+function normalizarNomeExibicao(nome: string | null | undefined): string {
+  if (!nome) return "(sem nome)";
+  return nome
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+/** Chave de agrupamento de uma obra: o código normalizado, ou, se a obra
+ * não tiver código cadastrado, `ID:<obra_id>` (agrupada sozinha) - nunca
+ * agrupa duas obras SEM código juntas só por estarem as duas vazias, seria
+ * bem mais fácil juntar coisa errada nesse caso do que quando bate um
+ * código de verdade. */
+function chaveDeGrupo(obraId: string, codigo: string | null | undefined): string {
+  return normalizarCodigo(codigo) || `ID:${obraId}`;
+}
+
+/** Acha todos os `obras.id` reais que pertencem ao mesmo grupo/plataforma
+ * de `grupoKey` (o código normalizado), junto com o nome de exibição e a
+ * empresa. Usado tanto pra listar/buscar documentos (várias obras juntas)
+ * quanto pra escrever um upload novo (resolve pra 1 id real - ver
+ * `obraIdCanonicoDoGrupo`). A tabela `obras` é pequena (poucas dezenas de
+ * linhas hoje), então busca todo mundo e filtra em JS em vez de tentar
+ * normalizar direto no SQL. */
+export async function resolverGrupoPlataforma(
+  grupoKey: string
+): Promise<{ obraIds: string[]; nome: string; empresa: string | null } | null> {
+  const { data } = await supabase.from("obras").select("id::text, nome, local_codigo, empresa");
+  const obras = (data as unknown as { id: string; nome: string | null; local_codigo: string | null; empresa: string | null }[]) || [];
+  const doGrupo = obras.filter((o) => chaveDeGrupo(o.id, o.local_codigo) === grupoKey);
+  if (doGrupo.length === 0) return null;
+  return {
+    obraIds: doGrupo.map((o) => o.id),
+    nome: normalizarNomeExibicao(doGrupo[0].nome),
+    empresa: doGrupo.find((o) => o.empresa)?.empresa ?? null,
+  };
+}
+
+/** Dado um grupo de `obras.id` reais (mesma plataforma física), escolhe 1
+ * id "canônico" pra gravar upload NOVO de documento geral - não importa
+ * muito qual, já que a LEITURA sempre agrega o grupo inteiro (ver
+ * `buscarDocumentosPlataforma`); só precisa ser sempre o mesmo, então usa
+ * sempre o menor id (comparado como número de verdade via BigInt, nunca
+ * como texto - ids antigos tipo "1"/"30" e novos tipo timestamp de 19
+ * dígitos não comparam certo como string). */
+function obraIdCanonicoDoGrupo(obraIds: string[]): string {
+  return obraIds.reduce((menor, atual) => (BigInt(atual) < BigInt(menor) ? atual : menor));
+}
+
 /** Só plataformas que já tiveram pelo menos 1 embarque de verdade - evita
  * obra de teste/cadastro vazio poluindo as abas (ver "Plataforma Teste
- * Vazio" etc., achadas ao investigar o schema em 14/09). Ordenada pela
- * atividade mais recente primeiro (mesmo critério de "Embarques ativos"). */
+ * Vazio" etc., achadas ao investigar o schema em 14/09). Já vem AGRUPADA
+ * por código normalizado (ver `chaveDeGrupo`) - cadastro duplicado da
+ * mesma plataforma física aparece como 1 aba só. Ordenada por nome. */
 export async function buscarPlataformas(): Promise<Plataforma[]> {
-  const { data, error } = await supabase
-    .from("embarques")
-    .select("obra_id::text, obra_nome, data_inicio")
-    .order("data_inicio", { ascending: false });
+  const { data, error } = await supabase.from("embarques").select("obra_id::text");
   if (error || !data) return [];
 
-  const porObra = new Map<string, Plataforma>();
-  for (const linha of data as unknown as { obra_id: string; obra_nome: string | null; data_inicio: string | null }[]) {
+  const contagemPorObraId = new Map<string, number>();
+  for (const linha of data as unknown as { obra_id: string }[]) {
     if (!linha.obra_id) continue;
-    const atual = porObra.get(linha.obra_id);
+    contagemPorObraId.set(linha.obra_id, (contagemPorObraId.get(linha.obra_id) || 0) + 1);
+  }
+  const idsComEmbarque = Array.from(contagemPorObraId.keys());
+  if (idsComEmbarque.length === 0) return [];
+
+  const { data: obrasRaw } = await supabase
+    .from("obras")
+    .select("id::text, nome, local_codigo, empresa")
+    .in("id", idsComEmbarque);
+  const obras = (obrasRaw as unknown as { id: string; nome: string | null; local_codigo: string | null; empresa: string | null }[]) || [];
+
+  const porGrupo = new Map<string, Plataforma>();
+  for (const obra of obras) {
+    const chave = chaveDeGrupo(obra.id, obra.local_codigo);
+    const totalDaObra = contagemPorObraId.get(obra.id) || 0;
+    const atual = porGrupo.get(chave);
     if (atual) {
-      atual.totalEmbarques += 1;
+      atual.totalEmbarques += totalDaObra;
+      if (!atual.empresa && obra.empresa) atual.empresa = obra.empresa;
     } else {
-      porObra.set(linha.obra_id, {
-        obraId: linha.obra_id,
-        nome: linha.obra_nome || "(sem nome)",
-        empresa: null,
-        totalEmbarques: 1,
+      porGrupo.set(chave, {
+        obraId: chave,
+        nome: normalizarNomeExibicao(obra.nome),
+        empresa: obra.empresa,
+        totalEmbarques: totalDaObra,
       });
     }
   }
 
-  // empresa não vem de `embarques` (só `obra_nome`, texto solto) - busca à
-  // parte na tabela `obras` pros ids que sobraram, só pra completar o dado
-  const ids = Array.from(porObra.keys());
-  if (ids.length > 0) {
-    const { data: obrasRaw } = await supabase.from("obras").select("id::text, empresa").in("id", ids);
-    for (const obra of (obrasRaw as unknown as { id: string; empresa: string | null }[]) || []) {
-      const p = porObra.get(obra.id);
-      if (p) p.empresa = obra.empresa;
-    }
-  }
-
-  return Array.from(porObra.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  return Array.from(porGrupo.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
 function periodoDoEmbarque(dataInicio: string | null, dataFim: string | null, ativo: boolean): string {
@@ -89,11 +173,20 @@ function periodoDoEmbarque(dataInicio: string | null, dataFim: string | null, at
  * A parte automática é pura agregação do que já existe (`rdos` e
  * `anexos_embarque`, ambos ligados por `embarque_id` -> `embarques.obra_id`)
  * - não duplica nenhum dado, só organiza pra exibição. */
-export async function buscarDocumentosPlataforma(obraId: string): Promise<DocumentosPlataforma> {
+export async function buscarDocumentosPlataforma(grupoKey: string): Promise<DocumentosPlataforma> {
+  // 14/09: `grupoKey` é o código normalizado da plataforma (ver
+  // `chaveDeGrupo`), não mais 1 `obra_id` cru - pode representar VÁRIOS
+  // `obras.id` reais (cadastro duplicado da mesma plataforma física).
+  // Tudo abaixo busca e junta o grupo inteiro, sem nunca reescrever
+  // `embarques.obra_id`/nenhum dado existente - é só agregação na leitura.
+  const grupo = await resolverGrupoPlataforma(grupoKey);
+  const obraIds = grupo?.obraIds ?? [grupoKey];
+  const nomeObra = grupo?.nome ?? "(sem nome)";
+
   const { data: embarquesRaw, error: erroEmb } = await supabase
     .from("embarques")
     .select("id::text, obra_nome, efetivo_nome, data_inicio, data_fim, ativo")
-    .eq("obra_id", obraId)
+    .in("obra_id", obraIds)
     .order("data_inicio", { ascending: false });
   if (erroEmb) throw new Error(`Não consegui buscar os embarques da plataforma: ${erroEmb.message}`);
 
@@ -101,7 +194,6 @@ export async function buscarDocumentosPlataforma(obraId: string): Promise<Docume
     id: string; obra_nome: string | null; efetivo_nome: string | null;
     data_inicio: string | null; data_fim: string | null; ativo: boolean;
   }[]) || [];
-  const nomeObra = embarques[0]?.obra_nome || "(sem nome)";
   const idsEmbarques = embarques.map((e) => e.id);
 
   const [{ data: rdosRaw }, { data: anexosRaw }, { data: geraisRaw }] = await Promise.all([
@@ -118,12 +210,20 @@ export async function buscarDocumentosPlataforma(obraId: string): Promise<Docume
           .from("anexos_embarque")
           .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
           .in("embarque_id", idsEmbarques)
-          .eq("tipo", "relatorio_embarque")
+          // 14/09 (bug achado pelo Rafael em produção): antes da coluna
+          // `tipo` existir (feature de 13/09), TODO anexo_embarque era um
+          // Relatório de Embarque - então os registros antigos ficaram com
+          // `tipo = NULL`, nunca `"relatorio_embarque"`. Filtrar só por
+          // `.eq("tipo", "relatorio_embarque")` escondia esses relatórios
+          // antigos (ex: os dois relatórios de agosto da Almirante Barroso,
+          // que o Rafael confirmou estarem anexados mas sumidos da tela) -
+          // NULL também conta como Relatório de Embarque legado.
+          .or("tipo.eq.relatorio_embarque,tipo.is.null")
           .order("enviado_em", { ascending: false }),
     supabase
       .from("documentos_plataforma")
       .select("id::text, categoria, nome_arquivo, caminho_storage, tamanho_bytes, enviado_por, enviado_em")
-      .eq("obra_id", obraId)
+      .in("obra_id", obraIds)
       .order("enviado_em", { ascending: false }),
   ]);
 
@@ -168,7 +268,7 @@ export async function buscarDocumentosPlataforma(obraId: string): Promise<Docume
   }));
 
   const documentosGerais: Record<CategoriaDocumento, DocumentoGeral[]> = {
-    isometricos: [], pid: [], plantas: [], outros: [],
+    isometricos: [], pid: [], plantas: [], mdgmsswo: [], outros: [],
   };
   const geraisLista = (geraisRaw as unknown as {
     id: string; categoria: string; nome_arquivo: string; caminho_storage: string;
@@ -203,5 +303,11 @@ export async function buscarDocumentosPlataforma(obraId: string): Promise<Docume
     }
   }
 
-  return { obraId, nomeObra, gruposRdo, relatoriosEmbarque, documentosGerais };
+  return { obraId: grupoKey, nomeObra, gruposRdo, relatoriosEmbarque, documentosGerais };
 }
+
+// exporta também pra `documentosPlataformaActions.ts` resolver, na hora do
+// upload, qual `obras.id` real gravar (ver `obraIdCanonicoDoGrupo` acima -
+// não pode gravar o `grupoKey` direto, `documentos_plataforma.obra_id` é
+// bigint de verdade, referenciando 1 obra real).
+export { obraIdCanonicoDoGrupo };

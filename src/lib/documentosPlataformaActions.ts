@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { criarClienteAdmin } from "@/lib/supabase-admin";
 import { CATEGORIAS_DOCUMENTO, type CategoriaDocumento } from "@/lib/documentosPlataformaTipos";
+import { resolverGrupoPlataforma, obraIdCanonicoDoGrupo } from "@/lib/documentosPlataforma";
 
 const NOME_BUCKET_DOCUMENTOS = "documentos-plataforma";
 const EXTENSOES_PERMITIDAS = ["pdf", "jpg", "jpeg", "png", "heic"];
@@ -43,13 +44,24 @@ export async function uploadDocumentoPlataforma(formData: FormData): Promise<Res
     return { sucesso: false, erro: "Você não tem acesso a essa área, ou sua sessão expirou." };
   }
 
-  const obraId = formData.get("obraId");
+  // 14/09: o que chega do formulário aqui é o GRUPO da plataforma (código
+  // normalizado - ver `chaveDeGrupo` em documentosPlataforma.ts), não mais
+  // 1 `obras.id` direto - pode representar mais de uma obra cadastrada de
+  // verdade (cadastro duplicado da mesma plataforma física). Resolve pro
+  // id real ANTES de gravar, já que `documentos_plataforma.obra_id` é
+  // bigint de verdade, referenciando 1 obra só.
+  const grupoKey = formData.get("obraId");
   const categoriaBruta = formData.get("categoria");
   const arquivo = formData.get("arquivo");
 
-  if (typeof obraId !== "string" || !obraId) {
+  if (typeof grupoKey !== "string" || !grupoKey) {
     return { sucesso: false, erro: "Plataforma não identificada." };
   }
+  const grupo = await resolverGrupoPlataforma(grupoKey);
+  if (!grupo) {
+    return { sucesso: false, erro: "Não achei essa plataforma no cadastro." };
+  }
+  const obraId = obraIdCanonicoDoGrupo(grupo.obraIds);
   const categoria: CategoriaDocumento | null =
     typeof categoriaBruta === "string" && (CATEGORIAS_DOCUMENTO as readonly string[]).includes(categoriaBruta)
       ? (categoriaBruta as CategoriaDocumento)
