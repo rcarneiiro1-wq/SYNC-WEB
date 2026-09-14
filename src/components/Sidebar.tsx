@@ -22,6 +22,8 @@ import {
   UserPlus,
   Menu,
   User,
+  Folder,
+  Upload,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -34,6 +36,18 @@ const ITENS_EMBARQUE: ItemMenu[] = [
   { rotulo: "Relatório por empresa", href: "/relatorios", icone: Building2 },
   { rotulo: "Histórico colaborador", href: "/historico-colaborador", icone: Users },
   { rotulo: "Relatório de embarcados", href: "/relatorio-embarcados", icone: Printer },
+];
+
+// "Documentos da Plataforma" (14/09) - biblioteca de arquivos por obra,
+// auto-alimentada (RDOs/Relatório de Embarque) + upload manual (Isométricos/
+// P&ID/Plantas/Outros). Reaproveita a MESMA permissão de "gerenciamento_
+// embarques" por enquanto - decisão do Rafael, ajusta quem vê cada coisa
+// depois. "Upload de Arquivos" fica como item SEPARADO, logo abaixo (pedido
+// explícito dele) - é a tela dedicada só pra subir, enquanto o primeiro item
+// é a biblioteca completa (que também tem um botão de enviar por categoria).
+const ITENS_DOCUMENTOS: ItemMenu[] = [
+  { rotulo: "Documentos da Plataforma", href: "/documentos-plataforma", icone: Folder },
+  { rotulo: "Upload de Arquivos", href: "/documentos-plataforma/upload", icone: Upload },
 ];
 
 // resto do sistema (ainda não migrado pro web) - "em breve" virou só uma
@@ -248,6 +262,19 @@ export function Sidebar({
             <>
               <TituloSecao titulo="Gerenciamento de embarque" />
               {ITENS_EMBARQUE.map((item) => {
+                const Icone = item.icone;
+                const ativo = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className={classeLink(ativo)} onClick={() => setMenuAberto(false)}>
+                    <Icone size={18} className="shrink-0" />
+                    <span>{item.rotulo}</span>
+                  </Link>
+                );
+              })}
+
+              <DivisorLateral />
+              <TituloSecao titulo="Documentos" />
+              {ITENS_DOCUMENTOS.map((item) => {
                 const Icone = item.icone;
                 const ativo = pathname === item.href;
                 return (
