@@ -114,21 +114,33 @@ export function SecaoAnexos({ embarqueId, anexos }: { embarqueId: string; anexos
     if (!arquivos || arquivos.length === 0) return;
     setProcessando(true);
     setErro(null);
-    for (const arquivo of Array.from(arquivos)) {
-      const formData = new FormData();
-      formData.set("embarqueId", embarqueId);
-      formData.set("arquivo", arquivo);
-      formData.set("tipo", tipoEscolhido);
-      formData.set("assinado", assinadoEscolhido ? "true" : "false");
-      const resultado = await subirAnexoEmbarque(formData);
-      if (!resultado.sucesso) {
-        setErro(resultado.erro);
-        break;
+    // try/finally aqui é essencial: se a Server Action lançar uma exceção de
+    // verdade (não só devolver {sucesso:false}) - por exemplo uma queda de
+    // conexão no meio do envio, bem comum em internet offshore limitada -,
+    // sem o finally o "Processando..." ficava travado pra sempre, porque o
+    // setProcessando(false) logo abaixo nunca era alcançado (achado em
+    // 14/09, investigando por que "Remover" parecia não fazer mais nada
+    // depois de uma falha anterior na mesma tela).
+    try {
+      for (const arquivo of Array.from(arquivos)) {
+        const formData = new FormData();
+        formData.set("embarqueId", embarqueId);
+        formData.set("arquivo", arquivo);
+        formData.set("tipo", tipoEscolhido);
+        formData.set("assinado", assinadoEscolhido ? "true" : "false");
+        const resultado = await subirAnexoEmbarque(formData);
+        if (!resultado.sucesso) {
+          setErro(resultado.erro);
+          break;
+        }
       }
+    } catch {
+      setErro("Não consegui completar o envio - confere a internet e tenta de novo.");
+    } finally {
+      setProcessando(false);
+      if (inputRef.current) inputRef.current.value = "";
+      router.refresh();
     }
-    setProcessando(false);
-    if (inputRef.current) inputRef.current.value = "";
-    router.refresh();
   };
 
   const abrirSelecionados = () => {
@@ -145,16 +157,25 @@ export function SecaoAnexos({ embarqueId, anexos }: { embarqueId: string; anexos
     if (!confirmado) return;
     setProcessando(true);
     setErro(null);
-    for (const id of selecionados) {
-      const resultado = await removerAnexoEmbarque(id);
-      if (!resultado.sucesso) {
-        setErro(resultado.erro);
-        break;
+    // mesmo motivo do try/finally em aoEscolherArquivos acima - sem isso,
+    // uma exceção de rede no meio da remoção deixava o botão preso em
+    // "Processando..." pro resto da sessão (só um F5 destravava), dando a
+    // impressão de que "Remover" simplesmente não fazia nada.
+    try {
+      for (const id of selecionados) {
+        const resultado = await removerAnexoEmbarque(id);
+        if (!resultado.sucesso) {
+          setErro(resultado.erro);
+          break;
+        }
       }
+    } catch {
+      setErro("Não consegui completar a remoção - confere a internet e tenta de novo.");
+    } finally {
+      setSelecionados(new Set());
+      setProcessando(false);
+      router.refresh();
     }
-    setSelecionados(new Set());
-    setProcessando(false);
-    router.refresh();
   };
 
   return (
