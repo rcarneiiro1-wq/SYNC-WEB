@@ -4,9 +4,8 @@ import Link from "next/link";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { buscarPlataformas, buscarDocumentosPlataforma } from "@/lib/documentosPlataforma";
 import { GruposRdoLista } from "@/components/documentos/GruposRdoLista";
+import { ListaRelatoriosEmbarque } from "@/components/documentos/ListaRelatoriosEmbarque";
 import { SecaoDocumentosGerais } from "@/components/documentos/SecaoDocumentosGerais";
-import { urlDownloadArquivo } from "@/lib/download";
-import { tempoRelativo } from "@/lib/tempo";
 
 export const dynamic = "force-dynamic";
 
@@ -94,37 +93,7 @@ export default async function PaginaDocumentosPlataforma({
             </div>
             <span className="text-xs text-gray-400">Alimentado sozinho ao enviar o relatório</span>
           </div>
-          {dados.relatoriosEmbarque.length === 0 ? (
-            <p className="text-xs text-gray-400 px-4 py-4">Nenhum Relatório de Embarque ainda.</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {dados.relatoriosEmbarque.map((rel) => (
-                <div key={rel.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                  {/* origem/nome em destaque, a pedido do Rafael (14/09) -
-                      facilita achar o relatório certo numa lista maior */}
-                  <span className="flex-1 min-w-0 text-gray-700 truncate" title={rel.colaborador}>
-                    {rel.colaborador}
-                  </span>
-                  <span className="text-xs text-gray-400 truncate hidden sm:inline" title={rel.nomeArquivo}>
-                    {rel.nomeArquivo}
-                  </span>
-                  <span className="text-xs text-gray-400 whitespace-nowrap">{rel.enviadoPor || "-"}</span>
-                  <span className="text-xs text-gray-300 whitespace-nowrap hidden md:inline">
-                    {tempoRelativo(rel.enviadoEm)}
-                  </span>
-                  {rel.url && (
-                    <a
-                      href={urlDownloadArquivo(rel.url, rel.nomeArquivo)}
-                      className="text-azul font-semibold hover:underline"
-                      title="Baixar"
-                    >
-                      ⬇
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <ListaRelatoriosEmbarque relatorios={dados.relatoriosEmbarque} />
         </div>
 
         <SecaoDocumentosGerais obraId={obraSelecionada.obraId} documentosGerais={dados.documentosGerais} />
