@@ -183,6 +183,18 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
   const obraIds = grupo?.obraIds ?? [grupoKey];
   const nomeObra = grupo?.nome ?? "(sem nome)";
 
+  // 14/09 (bug achado pelo Rafael em produção): `documentos_plataforma` é a
+  // ÚNICA tabela dessa tela com RLS fechada de propósito (zero policy
+  // pública - ver decisão de segurança da "nona entrega", mesmo padrão de
+  // `historico_navegacao`). O SELECT dela por isso PRECISA do cliente ADMIN
+  // (service_role, ignora RLS) - usar o `supabase` normal (chave anon)
+  // aqui não dá erro nenhum, só devolve a lista SEMPRE VAZIA (RLS barra
+  // silenciosamente), o que fazia todo upload em "MD/GM/SS/WO" (e em
+  // qualquer categoria geral) sumir sem nenhum aviso, em qualquer aba.
+  // Todas as outras tabelas (embarques/rdos/anexos_embarque) continuam
+  // pelo cliente anon normal, que já tem RLS pública.
+  const admin = criarClienteAdmin();
+
   const { data: embarquesRaw, error: erroEmb } = await supabase
     .from("embarques")
     .select("id::text, obra_nome, efetivo_nome, data_inicio, data_fim, ativo")
@@ -220,7 +232,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
           // NULL também conta como Relatório de Embarque legado.
           .or("tipo.eq.relatorio_embarque,tipo.is.null")
           .order("enviado_em", { ascending: false }),
-    supabase
+    admin
       .from("documentos_plataforma")
       .select("id::text, categoria, nome_arquivo, caminho_storage, tamanho_bytes, enviado_por, enviado_em")
       .in("obra_id", obraIds)
@@ -275,7 +287,6 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
     tamanho_bytes: number | null; enviado_por: string | null; enviado_em: string | null;
   }[]) || [];
   if (geraisLista.length > 0) {
-    const admin = criarClienteAdmin();
     // signed URLs em paralelo (Promise.all) - sequencial ficaria lento
     // conforme a biblioteca crescer, um round-trip por arquivo
     const comUrl = await Promise.all(
