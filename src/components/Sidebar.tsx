@@ -23,7 +23,6 @@ import {
   Menu,
   User,
   Folder,
-  Upload,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -38,16 +37,19 @@ const ITENS_EMBARQUE: ItemMenu[] = [
   { rotulo: "Relatório de embarcados", href: "/relatorio-embarcados", icone: Printer },
 ];
 
-// "Documentos da Plataforma" (14/09) - biblioteca de arquivos por obra,
-// auto-alimentada (RDOs/Relatório de Embarque) + upload manual (Isométricos/
-// P&ID/Plantas/Outros). Reaproveita a MESMA permissão de "gerenciamento_
-// embarques" por enquanto - decisão do Rafael, ajusta quem vê cada coisa
-// depois. "Upload de Arquivos" fica como item SEPARADO, logo abaixo (pedido
-// explícito dele) - é a tela dedicada só pra subir, enquanto o primeiro item
-// é a biblioteca completa (que também tem um botão de enviar por categoria).
+// "Biblioteca de Documentos" (14/09, renomeada de "Documentos da
+// Plataforma" em 15/09 - pedido do Rafael, achou mais profissional) -
+// biblioteca de arquivos por obra, auto-alimentada (RDOs/Relatório de
+// Embarque) + upload manual (Isométricos/P&ID/Plantas/MD-GM-SS-WO/Outros).
+// Reaproveita a MESMA permissão de "gerenciamento_embarques" por enquanto -
+// decisão do Rafael, ajusta quem vê cada coisa depois. O item separado
+// "Upload de Arquivos" (tela dedicada só pra subir) foi TIRADO da Sidebar
+// em 15/09 (pedido do Rafael: "já tem uma opção pra lançar os arquivos de
+// maneira bem mais fácil" - o próprio card de categoria já tem "Enviar
+// arquivo") - a rota `/documentos-plataforma/upload` continua existindo,
+// só não tem mais entrada na navegação.
 const ITENS_DOCUMENTOS: ItemMenu[] = [
-  { rotulo: "Documentos da Plataforma", href: "/documentos-plataforma", icone: Folder },
-  { rotulo: "Upload de Arquivos", href: "/documentos-plataforma/upload", icone: Upload },
+  { rotulo: "Biblioteca de Documentos", href: "/documentos-plataforma", icone: Folder },
 ];
 
 // resto do sistema (ainda não migrado pro web) - "em breve" virou só uma

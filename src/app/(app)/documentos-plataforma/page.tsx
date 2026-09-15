@@ -12,12 +12,14 @@ import { AcoesRapidas } from "@/components/documentos/AcoesRapidas";
 
 export const dynamic = "force-dynamic";
 
-/** "Documentos da Plataforma" (14/09) - uma aba por plataforma já visitada,
- * com os RDOs e Relatórios de Embarque alimentando sozinhos (agregação do
- * que já existe em `rdos`/`anexos_embarque`) + documentos gerais manuais
- * (Isométricos/P&ID/Plantas/MD-GM-SS-WO/Outros). Reaproveita a mesma
- * permissão de "gerenciamento_embarques" por enquanto (decisão do Rafael,
- * 14/09).
+/** "Biblioteca de Documentos" (14/09, renomeada de "Documentos da
+ * Plataforma" em 15/09 - pedido do Rafael, achou mais profissional; a rota
+ * continua `/documentos-plataforma` de propósito, só o nome exibido mudou)
+ * - uma aba por plataforma já visitada, com os RDOs e Relatórios de
+ * Embarque alimentando sozinhos (agregação do que já existe em
+ * `rdos`/`anexos_embarque`) + documentos gerais manuais (Isométricos/P&ID/
+ * Plantas/MD-GM-SS-WO/Outros). Reaproveita a mesma permissão de
+ * "gerenciamento_embarques" por enquanto (decisão do Rafael, 14/09).
  *
  * Redesenho de 15/09 (aprovado pelo Rafael a partir de um mockup que ele
  * mesmo trouxe, alinhado com um briefing detalhado): breadcrumb, RDOs em
@@ -42,7 +44,7 @@ export default async function PaginaDocumentosPlataforma({
   if (plataformas.length === 0) {
     return (
       <main className="max-w-6xl mx-auto px-6 py-8">
-        <h1 className="text-xl font-bold text-navy mb-1">Documentos da Plataforma</h1>
+        <h1 className="text-xl font-bold text-navy mb-1">Biblioteca de Documentos</h1>
         <div className="bg-white border border-gray-200 rounded-lg px-6 py-16 text-center text-gray-500 mt-6">
           Nenhuma plataforma com embarque registrado ainda.
         </div>
@@ -60,10 +62,10 @@ export default async function PaginaDocumentosPlataforma({
         <Home size={12} />
         <span>Plataformas</span>
         <span className="text-gray-300">›</span>
-        <span className="text-navy font-semibold">Documentos</span>
+        <span className="text-navy font-semibold">Biblioteca</span>
       </div>
 
-      <h1 className="text-xl font-bold text-navy mb-1">📁 Documentos da Plataforma</h1>
+      <h1 className="text-xl font-bold text-navy mb-1">📁 Biblioteca de Documentos</h1>
       <p className="text-sm text-gray-500 mb-6">
         RDOs e Relatórios de Embarque alimentados sozinhos, documentos gerais enviados manualmente.
       </p>
@@ -121,7 +123,7 @@ export default async function PaginaDocumentosPlataforma({
 
         <div className="flex flex-col gap-5">
           <ResumoPlataforma resumo={dados.resumo} />
-          <AcoesRapidas obraId={obraSelecionada.obraId} />
+          <AcoesRapidas />
           <div className="bg-azul/5 border border-azul/20 rounded-xl p-4 flex gap-2.5">
             <Info size={16} className="text-azul shrink-0 mt-0.5" />
             <p className="text-xs text-azul/90 leading-relaxed">

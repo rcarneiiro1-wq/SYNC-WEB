@@ -16,6 +16,14 @@ function tamanhoLegivel(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// 15/09: selo com a extensão do arquivo (PDF/JPG/PNG/HEIC) - só pra dar um
+// ponto de referência visual rápido, igual o ícone de tipo de arquivo do
+// Drive/Dropbox (ver conversa sobre visibilidade do nome do arquivo).
+function extensaoDoArquivo(nomeArquivo: string): string {
+  const ext = nomeArquivo.split(".").pop() || "";
+  return ext.slice(0, 4).toUpperCase() || "DOC";
+}
+
 // 15/09 (redesenho aprovado pelo Rafael a partir do mockup): um ícone por
 // categoria, só visual - reaproveita o `lucide-react` que o resto do site
 // já usa (Sidebar.tsx etc.), sem introduzir nenhuma biblioteca nova.
@@ -35,7 +43,14 @@ const ICONE_CATEGORIA: Record<CategoriaDocumento, { Icone: typeof Box; chip: str
  * Redesenho de 15/09: ícone por categoria no cabeçalho, e o "🗑 remover"
  * direto virou um menu "⋮" (Baixar/Remover) por linha, igual o Rafael
  * pediu no briefing - o "baixar" que já existia continua fazendo a mesma
- * coisa, só mudou de lugar. */
+ * coisa, só mudou de lugar.
+ *
+ * Ajuste de 15/09 (depois do Rafael testar): o nome do arquivo ficava
+ * "escondido", espremido numa linha só junto com tamanho/quem
+ * enviou/data/ações. Virou duas linhas por documento - padrão
+ * Drive/Dropbox, "Opção A" das duas que mostrei pra ele escolher: nome em
+ * destaque na primeira linha (quase a largura toda do card), e uma legenda
+ * pequena/cinza embaixo com tamanho · quem enviou · há quanto tempo. */
 export function CategoriaDocumentoGeral({
   obraId,
   categoria,
@@ -88,35 +103,42 @@ export function CategoriaDocumentoGeral({
       ) : (
         <div className="divide-y divide-gray-100">
           {documentos.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-3 px-4 py-2.5 text-sm relative">
-              <span className="flex-1 min-w-0 text-gray-700 truncate" title={doc.nomeArquivo}>
-                {doc.nomeArquivo}
+            <div key={doc.id} className="flex items-start gap-3 px-4 py-2.5 text-sm relative">
+              <span className="flex-none w-7 h-7 mt-0.5 rounded-md bg-gray-100 text-gray-500 text-[9px] font-bold flex items-center justify-center">
+                {extensaoDoArquivo(doc.nomeArquivo)}
               </span>
-              <span className="text-xs text-gray-400 whitespace-nowrap hidden sm:inline">
-                {tamanhoLegivel(doc.tamanhoBytes)}
-              </span>
-              <span className="text-xs text-gray-400 whitespace-nowrap">{doc.enviadoPor || "-"}</span>
-              <span className="text-xs text-gray-300 whitespace-nowrap hidden md:inline">
-                {tempoRelativo(doc.enviadoEm)}
-              </span>
-              {doc.url && (
-                <a
-                  href={urlDownloadArquivo(doc.url, doc.nomeArquivo)}
-                  className="text-azul font-semibold hover:underline whitespace-nowrap"
-                  title="Baixar"
-                >
-                  ⬇
-                </a>
-              )}
-              <button
-                type="button"
-                onClick={() => setMenuAberto((atual) => (atual === doc.id ? null : doc.id))}
-                disabled={removendo === doc.id}
-                className="text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-50 px-1"
-                title="Mais opções"
-              >
-                <MoreVertical size={15} />
-              </button>
+
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2">
+                  <span className="flex-1 min-w-0 text-gray-700 font-semibold break-words" title={doc.nomeArquivo}>
+                    {doc.nomeArquivo}
+                  </span>
+                  <div className="flex-none flex items-center gap-2 mt-0.5">
+                    {doc.url && (
+                      <a
+                        href={urlDownloadArquivo(doc.url, doc.nomeArquivo)}
+                        className="text-azul font-semibold hover:underline whitespace-nowrap"
+                        title="Baixar"
+                      >
+                        ⬇
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setMenuAberto((atual) => (atual === doc.id ? null : doc.id))}
+                      disabled={removendo === doc.id}
+                      className="text-gray-400 hover:text-gray-600 cursor-pointer disabled:opacity-50"
+                      title="Mais opções"
+                    >
+                      <MoreVertical size={15} />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {tamanhoLegivel(doc.tamanhoBytes)} · {doc.enviadoPor || "-"} · {tempoRelativo(doc.enviadoEm)}
+                </p>
+              </div>
+
               {menuAberto === doc.id && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuAberto(null)} />
