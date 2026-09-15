@@ -35,6 +35,11 @@ export type GrupoRdoEmbarque = {
   enviadoPor: string;
   totalRdos: number;
   rdos: RdoResumoDoc[];
+  // 15/09: redesenho da tela em tabela (a pedido do Rafael) - mesma
+  // condição já usada pra montar `periodo` (ver `periodoDoEmbarque` em
+  // documentosPlataforma.ts), só exposta como booleano pra não precisar a
+  // UI reinterpretar o texto do período pra saber o status.
+  emAndamento: boolean;
 };
 
 export type RelatorioEmbarqueDoc = {
@@ -57,10 +62,24 @@ export type DocumentoGeral = {
   url: string | null;
 };
 
+// 15/09: painel "Resumo da Plataforma" (redesenho aprovado pelo Rafael a
+// partir do mockup) - `responsavel` NÃO é um campo cadastrado (não existe
+// "responsável" em `obras`, conferido no schema antes de implementar) -
+// é o colaborador com a atividade mais recente nessa plataforma (RDO,
+// Relatório de Embarque ou documento geral), como um retrato de "quem
+// mexeu por último", não uma atribuição fixa.
+export type ResumoPlataforma = {
+  rdosHoje: number;
+  documentosEnviados: number;
+  ultimaAtividade: string | null; // já formatado "DD/MM/AAAA HH:MM", ou null se nunca houve atividade
+  responsavel: string | null;
+};
+
 export type DocumentosPlataforma = {
   obraId: string;
   nomeObra: string;
   gruposRdo: GrupoRdoEmbarque[];
   relatoriosEmbarque: RelatorioEmbarqueDoc[];
   documentosGerais: Record<CategoriaDocumento, DocumentoGeral[]>;
+  resumo: ResumoPlataforma;
 };

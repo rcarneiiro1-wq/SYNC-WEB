@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { criarClienteAdmin } from "@/lib/supabase-admin";
-import { formatarDataBr } from "@/lib/embarques";
+import { formatarDataBr, hojeIsoBrasil } from "@/lib/embarques";
 import {
   CATEGORIAS_DOCUMENTO,
   type CategoriaDocumento,
@@ -9,6 +9,7 @@ import {
   type GrupoRdoEmbarque,
   type RdoResumoDoc,
   type RelatorioEmbarqueDoc,
+  type ResumoPlataforma,
 } from "@/lib/documentosPlataformaTipos";
 
 // re-exporta os tipos/rótulos pra quem já importava daqui (server
@@ -213,7 +214,9 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
       ? Promise.resolve({ data: [] })
       : supabase
           .from("rdos")
-          .select("id::text, embarque_id::text, numero_rdo, data, arquivo_pdf_url")
+          // `atualizado_em` só entra pro cálculo de "RDOs lançados hoje" do
+          // Resumo da Plataforma (15/09) - não é exibido em lugar nenhum
+          .select("id::text, embarque_id::text, numero_rdo, data, arquivo_pdf_url, atualizado_em")
           .in("embarque_id", idsEmbarques)
           .order("numero_rdo", { ascending: true }),
     idsEmbarques.length === 0
@@ -239,8 +242,11 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
       .order("enviado_em", { ascending: false }),
   ]);
 
+  type RdoRaw = { id: string; embarque_id: string; numero_rdo: number; data: string | null; arquivo_pdf_url: string | null; atualizado_em: string | null };
+  const rdosBrutos = (rdosRaw as unknown as RdoRaw[]) || [];
+
   const rdosPorEmbarque = new Map<string, RdoResumoDoc[]>();
-  for (const r of (rdosRaw as unknown as { id: string; embarque_id: string; numero_rdo: number; data: string | null; arquivo_pdf_url: string | null }[]) || []) {
+  for (const r of rdosBrutos) {
     const lista = rdosPorEmbarque.get(r.embarque_id) || [];
     lista.push({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, url: r.arquivo_pdf_url });
     rdosPorEmbarque.set(r.embarque_id, lista);
@@ -251,6 +257,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
       const rdos = rdosPorEmbarque.get(emb.id) || [];
       if (rdos.length === 0) return null;
       const colaborador = emb.efetivo_nome || "(sem nome)";
+      const emAndamento = emb.ativo || !emb.data_fim;
       return {
         embarqueId: emb.id,
         colaborador,
@@ -261,6 +268,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
         enviadoPor: colaborador,
         totalRdos: rdos.length,
         rdos,
+        emAndamento,
       };
     })
     .filter((g): g is GrupoRdoEmbarque => g !== null);
@@ -314,7 +322,60 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
     }
   }
 
-  return { obraId: grupoKey, nomeObra, gruposRdo, relatoriosEmbarque, documentosGerais };
+  const resumo = montarResumoPlataforma(rdosBrutos, relatoriosEmbarque, documentosGerais, gruposRdo);
+
+  return { obraId: grupoKey, nomeObra, gruposRdo, relatoriosEmbarque, documentosGerais, resumo };
+}
+
+/** "AAAA-MM-DD" ou "AAAA-MM-DD HH:MM:SS"/ISO -> "DD/MM/AAAA HH:MM" - mesma
+ * regra de fatiar os 10+5 primeiros caracteres já usada em `recadoDeHoje`
+ * (embarques.ts), só que devolvendo string pronta em vez de partes soltas. */
+function formatarDataHoraBr(dataIso: string | null): string | null {
+  if (!dataIso) return null;
+  const dataFormatada = formatarDataBr(dataIso);
+  const hora = dataIso.length >= 16 ? dataIso.slice(11, 16) : null;
+  return hora ? `${dataFormatada} ${hora}` : dataFormatada;
+}
+
+/** Monta o painel "Resumo da Plataforma" (redesenho de 15/09, aprovado
+ * pelo Rafael a partir do mockup) - tudo aqui é AGREGAÇÃO do que já foi
+ * buscado nesta mesma chamada, nenhuma consulta nova ao banco.
+ * `responsavel` é explicado no tipo `ResumoPlataforma`. */
+function montarResumoPlataforma(
+  rdosBrutos: { atualizado_em: string | null }[],
+  relatoriosEmbarque: RelatorioEmbarqueDoc[],
+  documentosGerais: Record<CategoriaDocumento, DocumentoGeral[]>,
+  gruposRdo: GrupoRdoEmbarque[]
+): ResumoPlataforma {
+  const hoje = hojeIsoBrasil();
+  const rdosHoje = rdosBrutos.filter((r) => r.atualizado_em && r.atualizado_em.slice(0, 10) === hoje).length;
+
+  const documentosGeraisLista = Object.values(documentosGerais).flat();
+  const documentosEnviados = documentosGeraisLista.length;
+
+  // "última atividade" = upload mais recente (relatório de embarque ou
+  // documento geral) - os dois já têm `enviadoPor`/`enviadoEm` prontos;
+  // RDO não entra aqui porque não tem um "enviado por" próprio (ver nota
+  // em `gruposRdo` acima) - entraria como o próprio colaborador do
+  // embarque, o que mistura duas ideias diferentes de "atividade".
+  type Atividade = { quando: string; quem: string | null };
+  const atividades: Atividade[] = [
+    ...relatoriosEmbarque
+      .filter((r) => r.enviadoEm)
+      .map((r) => ({ quando: r.enviadoEm as string, quem: r.enviadoPor })),
+    ...documentosGeraisLista
+      .filter((d) => d.enviadoEm)
+      .map((d) => ({ quando: d.enviadoEm as string, quem: d.enviadoPor })),
+  ];
+  atividades.sort((a, b) => (a.quando < b.quando ? 1 : -1));
+  const maisRecente = atividades[0] ?? null;
+
+  // sem atividade de upload nenhuma ainda (plataforma nova) - cai pro
+  // colaborador do embarque mais recente, só pra não deixar em branco.
+  const responsavel = maisRecente?.quem ?? gruposRdo[0]?.colaborador ?? null;
+  const ultimaAtividade = formatarDataHoraBr(maisRecente?.quando ?? null);
+
+  return { rdosHoje, documentosEnviados, ultimaAtividade, responsavel };
 }
 
 // exporta também pra `documentosPlataformaActions.ts` resolver, na hora do
