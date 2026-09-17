@@ -6,8 +6,10 @@ import {
   resolverColaboradorDoUsuario,
   buscarDiariasColaborador,
   buscarDocumentosColaborador,
+  buscarLinhaDoTempoColaborador,
   type DiariasColaborador,
   type MeusDocumentos,
+  type LinhaDoTempoColaborador,
 } from "@/lib/painelColaborador";
 import type { Periodo } from "@/lib/relatorios";
 
@@ -17,6 +19,10 @@ export type ResultadoMeuPainel =
 
 export type ResultadoMeusDocumentos =
   | { vinculado: true; dados: MeusDocumentos }
+  | { vinculado: false };
+
+export type ResultadoLinhaDoTempo =
+  | { vinculado: true; dados: LinhaDoTempoColaborador }
   | { vinculado: false };
 
 /**
@@ -64,5 +70,29 @@ export async function buscarMeusDocumentos(): Promise<ResultadoMeusDocumentos> {
   }
 
   const dados = await buscarDocumentosColaborador(colaborador.colaboradorId);
+  return { vinculado: true, dados };
+}
+
+/**
+ * Busca a "Linha do Tempo" (resumo da trajetória inteira: embarques, dias
+ * trabalhados, plataformas) de QUEM ESTIVER LOGADO agora (17/09) - mesma
+ * identidade resolvida pelo cookie de sessão, mesma garantia das outras
+ * buscas desse arquivo. Chamada separada de `buscarMeuPainel` pelo mesmo
+ * motivo de `buscarMeusDocumentos`: não depende do período escolhido na
+ * tela.
+ */
+export async function buscarMinhaLinhaDoTempo(): Promise<ResultadoLinhaDoTempo> {
+  const jar = await cookies();
+  const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
+  if (!sessao) {
+    throw new Error("Sessão expirada - atualiza a página e loga de novo.");
+  }
+
+  const colaborador = await resolverColaboradorDoUsuario(sessao.usuario);
+  if (!colaborador) {
+    return { vinculado: false };
+  }
+
+  const dados = await buscarLinhaDoTempoColaborador(colaborador.colaboradorId);
   return { vinculado: true, dados };
 }

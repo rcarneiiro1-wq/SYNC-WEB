@@ -6,6 +6,7 @@ import { periodoMesCalendario, periodoFechamento, periodoAdjacente, type Periodo
 import { buscarMeuPainel, type ResultadoMeuPainel } from "@/lib/painelColaboradorActions";
 import { sair } from "@/app/actions";
 import { MeusDocumentosPessoais } from "@/components/MeusDocumentosPessoais";
+import { LinhaDoTempoColaborador } from "@/components/LinhaDoTempoColaborador";
 
 type TipoPeriodo = "calendario" | "fechamento";
 
@@ -167,6 +168,12 @@ export function PainelColaboradorConteudo({ nomeSessao }: { nomeSessao: string }
                 Nenhuma diária nesse período.
               </div>
             )}
+
+            {/* 17/09: "Linha do Tempo" - resumo da trajetória inteira do
+                colaborador (embarques, dias trabalhados, plataformas) +
+                lista cronológica, pra reconhecer quem tá sempre em dia -
+                ver LinhaDoTempoColaborador.tsx. */}
+            <LinhaDoTempoColaborador />
 
             {/* 17/09: "Documentos Pessoais" virou de verdade - RDOs e
                 Relatórios de Embarque do colaborador (todos os embarques,

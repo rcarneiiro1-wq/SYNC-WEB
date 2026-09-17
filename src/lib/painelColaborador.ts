@@ -248,3 +248,118 @@ export async function buscarDocumentosColaborador(colaboradorId: string): Promis
 
   return { gruposRdo, relatoriosEmbarque };
 }
+
+const MESES_ABREV_TIMELINE = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
+function mesAnoBr(dataIso: string): string {
+  const [ano, mes] = dataIso.slice(0, 10).split("-");
+  const nomeMes = MESES_ABREV_TIMELINE[Number(mes) - 1] ?? mes;
+  return `${nomeMes}/${ano}`;
+}
+
+export type EventoLinhaDoTempo = {
+  embarqueId: string;
+  obra: string;
+  periodo: string;
+  emAndamento: boolean;
+};
+
+export type LinhaDoTempoColaborador = {
+  totalEmbarques: number;
+  totalDiasTrabalhados: number;
+  totalPlataformas: number;
+  /** "Mar/2024" - mês/ano do primeiro embarque, ou null se nunca teve
+   * nenhum embarque registrado ainda. */
+  comAGenteDesde: string | null;
+  /** Mais recente primeiro - pra ficar igual a lista de "Diárias" e de
+   * "Documentos Pessoais" acima dela no painel. */
+  eventos: EventoLinhaDoTempo[];
+};
+
+/**
+ * "Linha do Tempo" do colaborador (17/09, a pedido do Rafael, ideia de
+ * gamificação/reconhecimento pro Meu Painel) - um resumo de TODA a
+ * trajetória da pessoa na empresa: quantos embarques, quantos dias
+ * trabalhados (somados) e em quantas plataformas diferentes, desde
+ * quando ela está com a gente, mais a lista cronológica dos embarques.
+ *
+ * SEM filtro de período, igual `buscarDocumentosColaborador` - é a
+ * carreira inteira, não um mês. `colaboradorId` sempre vem de
+ * `resolverColaboradorDoUsuario` (mesma garantia de segurança das
+ * outras buscas desse arquivo).
+ *
+ * A conta de "dias trabalhados" reaproveita EXATAMENTE a mesma dupla
+ * `intervaloRealDoEmbarque` + `diasSobrepostos` usada em
+ * `buscarDiariasColaborador` (e no relatório por empresa) - só que sem
+ * recortar por período, pra não ter uma segunda régua de "quantos dias
+ * é um embarque" que possa divergir da diária de verdade com o tempo.
+ */
+export async function buscarLinhaDoTempoColaborador(colaboradorId: string): Promise<LinhaDoTempoColaborador> {
+  const COLUNAS_EMBARQUES =
+    "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+    "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em, colaborador_id::text";
+
+  const { data: embarquesRaw, error: erroEmb } = await supabase
+    .from("embarques")
+    .select(COLUNAS_EMBARQUES)
+    .eq("colaborador_id", colaboradorId)
+    .order("data_inicio", { ascending: true });
+  if (erroEmb) throw new Error(`Não consegui buscar sua linha do tempo: ${erroEmb.message}`);
+
+  const embarques = (embarquesRaw || []) as unknown as Embarque[];
+  if (embarques.length === 0) {
+    return { totalEmbarques: 0, totalDiasTrabalhados: 0, totalPlataformas: 0, comAGenteDesde: null, eventos: [] };
+  }
+
+  const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
+  const idsEmbarques = embarques.map((e) => e.id);
+  const [{ data: obrasRaw }, { data: rdosRaw }] = await Promise.all([
+    supabase.from("obras").select("id::text, nome").in("id", idsObras.length ? idsObras : ["-1"]),
+    supabase.from("rdos").select("id::text, embarque_id::text, data").in("embarque_id", idsEmbarques),
+  ]);
+
+  const obrasPorId = new Map(
+    ((obrasRaw || []) as unknown as { id: string; nome: string | null }[]).map((o) => [o.id, o.nome])
+  );
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
+  for (const r of (rdosRaw || []) as unknown as { embarque_id: string; data: string | null }[]) {
+    const lista = rdosPorEmbarque.get(r.embarque_id) || [];
+    lista.push({ data: r.data } as Rdo);
+    rdosPorEmbarque.set(r.embarque_id, lista);
+  }
+
+  let totalDiasTrabalhados = 0;
+  const plataformas = new Set<string>();
+  const eventos: EventoLinhaDoTempo[] = [];
+
+  for (const embarque of embarques) {
+    const nomeObra = obrasPorId.get(embarque.obra_id) || embarque.obra_nome || "-";
+    plataformas.add(nomeObra);
+
+    const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
+    const { inicio, fim } = intervaloRealDoEmbarque(embarque, listaRdos);
+    if (inicio) {
+      // limites bem largos = pega o intervalo inteiro (sem recorte de período)
+      totalDiasTrabalhados += diasSobrepostos(inicio, fim, "0001-01-01", "9999-12-31");
+    }
+
+    eventos.push({
+      embarqueId: embarque.id,
+      obra: nomeObra,
+      periodo: periodoDoEmbarque(embarque.data_inicio, embarque.data_fim, embarque.ativo),
+      emAndamento: embarque.ativo || !embarque.data_fim,
+    });
+  }
+
+  eventos.reverse(); // a busca veio do mais antigo pro mais novo (pra achar "desde quando" certo) - inverte pra exibir
+
+  return {
+    totalEmbarques: embarques.length,
+    totalDiasTrabalhados,
+    totalPlataformas: plataformas.size,
+    comAGenteDesde: embarques[0].data_inicio ? mesAnoBr(embarques[0].data_inicio) : null,
+    eventos,
+  };
+}
