@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import { diasSobrepostos, intervaloRealDoEmbarque, type Periodo } from "@/lib/relatorios";
 import type { Embarque, Obra, Rdo } from "@/lib/embarques";
+import { periodoDoEmbarque } from "@/lib/documentosPlataforma";
+import type { GrupoRdoEmbarque, RdoResumoDoc, RelatorioEmbarqueDoc } from "@/lib/documentosPlataformaTipos";
 
 /**
  * Dados do "painel do colaborador" (ideia de 11/09, a pedido do Rafael
@@ -147,4 +149,102 @@ export async function buscarDiariasColaborador(colaboradorId: string, periodo: P
   detalhes.sort((a, b) => (b.periodoNoRecorte > a.periodoNoRecorte ? 1 : -1));
 
   return { totalDiarias, embarques: detalhes, plataformaAtual };
+}
+
+/**
+ * RDOs e Relatórios de Embarque de TODOS os embarques do colaborador
+ * (17/09, a pedido do Rafael pra "Documentos Pessoais" do Meu Painel) -
+ * SEM filtro de período, ao contrário de `buscarDiariasColaborador` acima:
+ * a ideia é a pessoa ver tudo que já lançou, desde sempre, não só o
+ * período escolhido na tela. `colaboradorId` sempre vem de
+ * `resolverColaboradorDoUsuario` - mesma garantia de segurança da diária,
+ * nunca um id vindo do cliente.
+ *
+ * Reaproveita o MESMO jeito de agrupar RDO por embarque (e a mesma regra
+ * de período/"em andamento") já usado em `buscarDocumentosPlataforma`
+ * (documentosPlataforma.ts, tela de gerência) - só troca o filtro de
+ * "embarques dessa OBRA" por "embarques desse COLABORADOR", pra não ter
+ * a mesma lógica duplicada em dois lugares podendo divergir com o tempo.
+ */
+export type MeusDocumentos = {
+  gruposRdo: GrupoRdoEmbarque[];
+  relatoriosEmbarque: RelatorioEmbarqueDoc[];
+};
+
+export async function buscarDocumentosColaborador(colaboradorId: string): Promise<MeusDocumentos> {
+  const { data: embarquesRaw, error: erroEmb } = await supabase
+    .from("embarques")
+    .select("id::text, efetivo_nome, data_inicio, data_fim, ativo")
+    .eq("colaborador_id", colaboradorId)
+    .order("data_inicio", { ascending: false });
+  if (erroEmb) throw new Error(`Não consegui buscar seus RDOs/relatórios: ${erroEmb.message}`);
+
+  const embarques = (embarquesRaw as unknown as {
+    id: string; efetivo_nome: string | null; data_inicio: string | null; data_fim: string | null; ativo: boolean;
+  }[]) || [];
+  const idsEmbarques = embarques.map((e) => e.id);
+
+  if (idsEmbarques.length === 0) {
+    return { gruposRdo: [], relatoriosEmbarque: [] };
+  }
+
+  const [{ data: rdosRaw }, { data: anexosRaw }] = await Promise.all([
+    supabase
+      .from("rdos")
+      .select("id::text, embarque_id::text, numero_rdo, data, arquivo_pdf_url")
+      .in("embarque_id", idsEmbarques)
+      .order("numero_rdo", { ascending: true }),
+    supabase
+      .from("anexos_embarque")
+      .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
+      .in("embarque_id", idsEmbarques)
+      // mesma regra já usada em documentosPlataforma.ts: registros antigos
+      // (de antes da coluna `tipo` existir) ficaram com `tipo = NULL`, mas
+      // TODOS eram Relatório de Embarque na época - conta como tal também
+      .or("tipo.eq.relatorio_embarque,tipo.is.null")
+      .order("enviado_em", { ascending: false }),
+  ]);
+
+  type RdoRaw = { id: string; embarque_id: string; numero_rdo: number; data: string | null; arquivo_pdf_url: string | null };
+  const rdosBrutos = (rdosRaw as unknown as RdoRaw[]) || [];
+
+  const rdosPorEmbarque = new Map<string, RdoResumoDoc[]>();
+  for (const r of rdosBrutos) {
+    const lista = rdosPorEmbarque.get(r.embarque_id) || [];
+    lista.push({ id: r.id, numeroRdo: r.numero_rdo, data: r.data, url: r.arquivo_pdf_url });
+    rdosPorEmbarque.set(r.embarque_id, lista);
+  }
+
+  const gruposRdo: GrupoRdoEmbarque[] = embarques
+    .map((emb): GrupoRdoEmbarque | null => {
+      const rdos = (rdosPorEmbarque.get(emb.id) || []).sort((a, b) => a.numeroRdo - b.numeroRdo);
+      if (rdos.length === 0) return null;
+      const colaborador = emb.efetivo_nome || "(sem nome)";
+      return {
+        embarqueId: emb.id,
+        colaborador,
+        periodo: periodoDoEmbarque(emb.data_inicio, emb.data_fim, emb.ativo),
+        enviadoPor: colaborador,
+        totalRdos: rdos.length,
+        rdos,
+        emAndamento: emb.ativo || !emb.data_fim,
+      };
+    })
+    .filter((g): g is GrupoRdoEmbarque => g !== null);
+
+  const colaboradorPorEmbarque = new Map(embarques.map((e) => [e.id, e.efetivo_nome || "(sem nome)"]));
+  const relatoriosEmbarque: RelatorioEmbarqueDoc[] = ((anexosRaw as unknown as {
+    id: string; embarque_id: string; nome_arquivo: string; url_nuvem: string | null;
+    enviado_por: string | null; enviado_em: string | null;
+  }[]) || []).map((a) => ({
+    id: a.id,
+    embarqueId: a.embarque_id,
+    colaborador: colaboradorPorEmbarque.get(a.embarque_id) || "(sem nome)",
+    nomeArquivo: a.nome_arquivo,
+    enviadoPor: a.enviado_por,
+    enviadoEm: a.enviado_em,
+    url: a.url_nuvem,
+  }));
+
+  return { gruposRdo, relatoriosEmbarque };
 }

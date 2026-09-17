@@ -160,7 +160,11 @@ export async function buscarPlataformas(): Promise<Plataforma[]> {
   return Array.from(porGrupo.values()).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 }
 
-function periodoDoEmbarque(dataInicio: string | null, dataFim: string | null, ativo: boolean): string {
+// exportada (17/09) pra `painelColaborador.ts` reaproveitar a mesma regra
+// no "Meu Painel" - agrupamento por embarque em vez de por obra, mas o
+// texto de período/status "em andamento" tem que ser sempre o MESMO
+// critério nos dois lugares, então vive só aqui.
+export function periodoDoEmbarque(dataInicio: string | null, dataFim: string | null, ativo: boolean): string {
   const inicio = dataInicio ? formatarDataBr(dataInicio) : "-";
   if (ativo || !dataFim) return `${inicio} - em andamento`;
   return `${inicio} - ${formatarDataBr(dataFim)}`;

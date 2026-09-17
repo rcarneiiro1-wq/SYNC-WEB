@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Ship, LogOut, Folder, Receipt, ClipboardList, FileText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ship, LogOut } from "lucide-react";
 import { periodoMesCalendario, periodoFechamento, periodoAdjacente, type Periodo } from "@/lib/relatorios";
 import { buscarMeuPainel, type ResultadoMeuPainel } from "@/lib/painelColaboradorActions";
 import { sair } from "@/app/actions";
+import { MeusDocumentosPessoais } from "@/components/MeusDocumentosPessoais";
 
 type TipoPeriodo = "calendario" | "fechamento";
 
@@ -167,34 +168,12 @@ export function PainelColaboradorConteudo({ nomeSessao }: { nomeSessao: string }
               </div>
             )}
 
-            {/* 11/09: seção "Documentos Pessoais" - ainda EM CONSTRUÇÃO, só
-                pra sinalizar que o painel está evoluindo. A ideia futura é
-                a Andréia anexar aqui contracheque/RDO/relatório de cada
-                colaborador. Por enquanto é só visual (nenhum documento de
-                verdade é buscado ou listado). */}
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden mt-4">
-              <div className="px-4 py-3 flex items-center justify-between border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <Folder size={16} className="text-gray-400" />
-                  <span className="text-sm font-semibold text-navy">Documentos Pessoais</span>
-                </div>
-                <span className="text-[10px] bg-amarelo/10 text-amarelo font-semibold px-2 py-1 rounded-full whitespace-nowrap">
-                  Em construção
-                </span>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {[
-                  { rotulo: "Contracheques", Icone: Receipt },
-                  { rotulo: "RDOs", Icone: ClipboardList },
-                  { rotulo: "Relatórios", Icone: FileText },
-                ].map(({ rotulo, Icone }) => (
-                  <div key={rotulo} className="px-4 py-3 flex items-center gap-3 text-gray-300">
-                    <Icone size={16} />
-                    <span className="text-sm">{rotulo}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* 17/09: "Documentos Pessoais" virou de verdade - RDOs e
+                Relatórios de Embarque do colaborador (todos os embarques,
+                sem filtro de período). Contracheques continua só visual
+                ("Em breve") até a automação por CPF existir - ver
+                MeusDocumentosPessoais.tsx. */}
+            <MeusDocumentosPessoais />
           </>
         )}
       </main>
