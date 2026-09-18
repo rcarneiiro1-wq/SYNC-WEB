@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { cookies } from "next/headers";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
-import { FileText, Ship, Award } from "lucide-react";
+import { FileText, Ship, Award, Wrench } from "lucide-react";
 
 type Cartao = {
   titulo: string;
@@ -49,6 +49,19 @@ function construirCartoes(temAcessoCertificados: boolean, temAcessoEmbarques: bo
       corFundoIcone: "#EEE9F9",
       href: temAcessoEmbarques ? "/embarques" : undefined,
       notaSeDesabilitado: temAcessoEmbarques ? undefined : "Sem acesso liberado pra essa área",
+    },
+    {
+      // 18/09: card "reserva o lugar" - Rafael ainda vai alinhar com a
+      // Andreia como ela quer essa ferramenta (saber qual equipamento
+      // está com cada colaborador embarcado) antes de desenhar de
+      // verdade. Por enquanto é só sinalizar que o sistema tá em
+      // evolução (o Uilian ia dar uma olhada no sistema hoje).
+      titulo: "Controle de Equipamentos",
+      descricao: "Saiba qual equipamento está com cada colaborador embarcado.",
+      icone: Wrench,
+      corIcone: "#0f8a8a",
+      corFundoIcone: "#E3F6F6",
+      notaSeDesabilitado: "Em construção",
     },
   ];
 }
