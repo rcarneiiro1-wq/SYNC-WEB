@@ -233,6 +233,46 @@
   white-space: nowrap;
 }
 
+/* Fileira de "outras filas" - só contexto pra história na apresentação
+   (pedido do Rafael: mostrar que cada setor tem a própria fila, não só
+   o de Levantamento). Nenhum clique aqui, de propósito. */
+.outrasFilas { max-width: 640px; margin: 20px auto 0; }
+.outrasFilasLabel {
+  display: block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.outrasFilasRow { display: flex; flex-wrap: wrap; gap: 8px; }
+.filaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 7px 8px 7px 11px;
+  border-radius: 999px;
+}
+.filaChipDot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
+.filaChipCount {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.outrasFilasHint { font-size: 11px; color: var(--ink-faint); margin: 10px 0 0; }
+
 /* ---------- Passo 2: conversa do atendimento ---------- */
 .chatHeader {
   display: flex;

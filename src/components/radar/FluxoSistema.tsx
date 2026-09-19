@@ -50,6 +50,18 @@ function iniciais(autor: Autor): string {
   return autor.slice(0, 2).toUpperCase();
 }
 
+// Só contexto visual pro Passo 1 - o resto dos setores do pipeline (ver
+// AtendimentosInternosPrototype, seção 01) também tem fila própria, não
+// só o de Levantamento. Números fixos, sem clique - é pra contar a
+// história na apresentação, não interagir.
+const OUTRAS_FILAS: { setor: string; count: number }[] = [
+  { setor: "Nuvem de Pontos", count: 2 },
+  { setor: "Produção", count: 1 },
+  { setor: "Modelagem", count: 3 },
+  { setor: "Revisão", count: 2 },
+  { setor: "RDV & Entrega", count: 1 },
+];
+
 type Anexo = { nome: string; tipo: string; meta: string; icone: ElementType };
 
 type Mensagem = {
@@ -269,6 +281,20 @@ export function FluxoSistema() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div className={estilos.outrasFilas}>
+              <span className={estilos.outrasFilasLabel}>Outras filas do escritório agora</span>
+              <div className={estilos.outrasFilasRow}>
+                {OUTRAS_FILAS.map((f) => (
+                  <span key={f.setor} className={estilos.filaChip}>
+                    <span className={estilos.filaChipDot} />
+                    {f.setor}
+                    <span className={estilos.filaChipCount}>{f.count}</span>
+                  </span>
+                ))}
+              </div>
+              <p className={estilos.outrasFilasHint}>Cada setor tem a própria fila — essas aqui ainda não têm tela própria neste protótipo.</p>
             </div>
           </div>
         ) : (
