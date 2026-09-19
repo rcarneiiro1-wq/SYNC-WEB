@@ -75,6 +75,7 @@ export type DadosColaborador = {
   cpf?: string | null;
   empresa?: string | null;
   localTrabalho?: string | null;
+  tipoSanguineo?: string | null;
 };
 
 export async function salvarColaborador(
@@ -95,6 +96,7 @@ export async function salvarColaborador(
     cpf: dados.cpf || null,
     empresa: dados.empresa || null,
     local_trabalho: dados.localTrabalho || null,
+    tipo_sanguineo: dados.tipoSanguineo || null,
   };
 
   if (colaboradorId) {
@@ -273,6 +275,8 @@ export type DadosCertificado = {
   numero?: string | null;
   dataEmissao?: string | null;
   dataVencimento?: string | null;
+  observacao?: string | null;
+  anoCarteirinha?: string | null;
 };
 
 export async function salvarCertificado(
@@ -297,6 +301,8 @@ export async function salvarCertificado(
     numero: dados.numero || null,
     data_emissao: dados.dataEmissao || null,
     data_vencimento: dados.dataVencimento || null,
+    observacao: dados.observacao || null,
+    ano_carteirinha: dados.anoCarteirinha || null,
   };
 
   if (certificadoId) {
@@ -381,37 +387,47 @@ export async function excluirCertificadoDefinitivo(certificadoId: string): Promi
 
 export type DadosNumeracao = {
   categoria: string;
-  numero: string;
   descricao?: string | null;
   dataEmissao?: string | null;
   validade?: string | null;
   colaboradorId?: string | null;
 };
 
-export async function salvarNumeracao(dados: DadosNumeracao): Promise<ResultadoCertificados> {
+/** Lança uma numeração NR/PE nova. O NÚMERO NUNCA vem do cliente - antes
+ * vinha (calculado na tela, "maior + 1", e mandado de volta pra cá pra só
+ * gravar), o que causava duplicidade real de numeração quando dois
+ * lançamentos aconteciam em sequência rápida, antes da tela recarregar com
+ * o número seguinte certo (achado numa auditoria em 18/09: NR 430, 513,
+ * 533, 1162 e 1206 saíram duplicados em produção). Agora quem calcula E
+ * grava o "maior + 1" é a função `lancar_numeracao` no Postgres, numa
+ * transação só travada por categoria (`pg_advisory_xact_lock`) - two
+ * lançamentos concorrentes da MESMA categoria agora sempre ficam em fila,
+ * nunca pegam o mesmo número. Pedido explícito da Angélica (relatado pelo
+ * Rafael, 18/09): o sistema só pode dar CONTINUIDADE à numeração que ela já
+ * usa, nunca inventar uma paralela nem repetir. */
+export async function salvarNumeracao(dados: DadosNumeracao): Promise<ResultadoCertificados & { numero?: string }> {
   let sessao: SessaoUsuario;
   try {
     sessao = await exigirAcessoCertificados();
   } catch (e) {
     return { sucesso: false, erro: e instanceof Error ? e.message : "Acesso negado." };
   }
-  if (!dados.categoria || !dados.numero) return { sucesso: false, erro: "Categoria e número são obrigatórios." };
+  if (!dados.categoria) return { sucesso: false, erro: "Categoria é obrigatória." };
 
   const admin = criarClienteAdmin();
   const novoId = gerarIdGlobal();
-  const { error } = await admin.from("numeracao_certificados").insert({
-    id: novoId,
-    categoria: dados.categoria,
-    numero: dados.numero,
-    descricao: dados.descricao || null,
-    data_emissao: dados.dataEmissao || null,
-    validade: dados.validade || null,
-    colaborador_id: dados.colaboradorId || null,
+  const { data: numero, error } = await admin.rpc("lancar_numeracao", {
+    p_id: novoId,
+    p_categoria: dados.categoria,
+    p_descricao: dados.descricao || null,
+    p_data_emissao: dados.dataEmissao || null,
+    p_validade: dados.validade || null,
+    p_colaborador_id: dados.colaboradorId ? Number(dados.colaboradorId) : null,
   });
   if (error) return { sucesso: false, erro: `Não consegui lançar: ${error.message}` };
-  await registrarAuditoria(admin, sessao.nome, "lançou numeração", "numeracao", novoId, `${dados.categoria} ${dados.numero}`);
+  await registrarAuditoria(admin, sessao.nome, "lançou numeração", "numeracao", novoId, `${dados.categoria} ${numero}`);
   revalidatePath("/certificados/numeracao");
-  return { sucesso: true };
+  return { sucesso: true, numero: numero as string };
 }
 
 export async function excluirNumeracao(numeracaoId: string): Promise<ResultadoCertificados> {

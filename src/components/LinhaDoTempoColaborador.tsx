@@ -25,7 +25,9 @@ export function LinhaDoTempoColaborador() {
 
   useEffect(() => {
     buscarMinhaLinhaDoTempo()
-      .then((r) => setDados(r.vinculado ? r.dados : null))
+      .then((r) => {
+        setDados(r.vinculado ? r.dados : null);
+      })
       .catch(() => setErro(true))
       .finally(() => setCarregando(false));
   }, []);

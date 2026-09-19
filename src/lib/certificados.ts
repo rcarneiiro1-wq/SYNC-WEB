@@ -64,26 +64,30 @@ export type Colaborador = {
   usuarioLogin: string | null;
   ativo: boolean;
   criadoEm: string | null;
+  /** Novo (18/09, mapeamento das planilhas de certificados) - só existe
+   * na planilha de controle de ASO, não tem em lugar nenhum do sistema
+   * ainda. Opcional, texto livre (ex: "O+", "AB-"). */
+  tipoSanguineo: string | null;
 };
 
 type ColaboradorRaw = {
   id: string; nome: string; cpf: string | null; empresa: string | null;
   local_trabalho: string | null; eh_usuario_sistema: boolean | null; ativo: boolean | null;
-  criado_em: string | null; usuario_login: string | null;
+  criado_em: string | null; usuario_login: string | null; tipo_sanguineo: string | null;
 };
 
 function converterColaborador(c: ColaboradorRaw): Colaborador {
   return {
     id: c.id, nome: c.nome, cpf: c.cpf, empresa: c.empresa, localTrabalho: c.local_trabalho,
     ehUsuarioSistema: Boolean(c.eh_usuario_sistema), usuarioLogin: c.usuario_login,
-    ativo: c.ativo !== false, criadoEm: c.criado_em,
+    ativo: c.ativo !== false, criadoEm: c.criado_em, tipoSanguineo: c.tipo_sanguineo,
   };
 }
 
 export async function buscarColaboradores(somenteAtivos = true): Promise<Colaborador[]> {
   let query = supabase
     .from("colaboradores")
-    .select("id::text, nome, cpf, empresa, local_trabalho, eh_usuario_sistema, ativo, criado_em, usuario_login")
+    .select("id::text, nome, cpf, empresa, local_trabalho, eh_usuario_sistema, ativo, criado_em, usuario_login, tipo_sanguineo")
     .order("nome");
   if (somenteAtivos) query = query.eq("ativo", true);
   const { data, error } = await query;
@@ -150,11 +154,19 @@ export type CertificadoLista = {
   dataEmissao: string | null;
   dataVencimento: string | null;
   status: StatusCertificado;
+  /** Novos (18/09, mapeamento das planilhas) - texto livre (ex: qual
+   * base/empresa do ASO) e o ano da carteirinha do CFT (achamos na
+   * auditoria que esse ano vinha sendo digitado, por engano, no campo
+   * "número" - ver estado-atual.md). Ambos opcionais e genéricos, não
+   * só pra ASO/CFT. */
+  observacao: string | null;
+  anoCarteirinha: string | null;
 };
 
 type CertificadoRaw = {
   id: string; colaborador_id: string; tipo_id: string; empresa: string | null; numero: string | null;
   data_emissao: string | null; data_vencimento: string | null;
+  observacao: string | null; ano_carteirinha: string | null;
 };
 
 export type FiltrosCertificados = {
@@ -173,7 +185,7 @@ export type FiltrosCertificados = {
 export async function buscarCertificados(filtros: FiltrosCertificados = {}): Promise<CertificadoLista[]> {
   const { data: certRaw, error } = await supabase
     .from("certificados")
-    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento")
+    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, observacao, ano_carteirinha")
     .eq("excluido", false);
   if (error) throw new Error(`Não consegui buscar os certificados: ${error.message}`);
   const certificados = (certRaw || []) as unknown as CertificadoRaw[];
@@ -202,6 +214,8 @@ export async function buscarCertificados(filtros: FiltrosCertificados = {}): Pro
         dataEmissao: c.data_emissao,
         dataVencimento: c.data_vencimento,
         status: calcularStatus(c.data_vencimento),
+        observacao: c.observacao,
+        anoCarteirinha: c.ano_carteirinha,
       };
     })
     .filter((c): c is CertificadoLista => c !== null);
@@ -227,7 +241,7 @@ export async function buscarCertificados(filtros: FiltrosCertificados = {}): Pro
 export async function buscarCertificadoPorId(certificadoId: string): Promise<CertificadoLista | null> {
   const { data, error } = await supabase
     .from("certificados")
-    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento")
+    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, observacao, ano_carteirinha")
     .eq("id", certificadoId)
     .maybeSingle();
   if (error) throw new Error(`Não consegui buscar o certificado: ${error.message}`);
@@ -242,7 +256,7 @@ export async function buscarCertificadoPorId(certificadoId: string): Promise<Cer
     colaboradorEmpresa: colaborador.empresa, colaboradorLocal: colaborador.localTrabalho,
     tipoId: c.tipo_id, tipoNome: tipo.nome, categoria: tipo.categoria, empresa: c.empresa,
     numero: c.numero, dataEmissao: c.data_emissao, dataVencimento: c.data_vencimento,
-    status: calcularStatus(c.data_vencimento),
+    status: calcularStatus(c.data_vencimento), observacao: c.observacao, anoCarteirinha: c.ano_carteirinha,
   };
 }
 
@@ -255,7 +269,7 @@ export type CertificadoLixeira = CertificadoLista & { excluidoEm: string | null;
 export async function buscarLixeira(): Promise<CertificadoLixeira[]> {
   const { data: certRaw, error } = await supabase
     .from("certificados")
-    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, excluido_em")
+    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, excluido_em, observacao, ano_carteirinha")
     .eq("excluido", true);
   if (error) throw new Error(`Não consegui buscar a lixeira: ${error.message}`);
   const certificados = (certRaw || []) as unknown as (CertificadoRaw & { excluido_em: string | null })[];
@@ -282,6 +296,7 @@ export async function buscarLixeira(): Promise<CertificadoLixeira[]> {
         tipoId: c.tipo_id, tipoNome: tipo.nome, categoria: tipo.categoria, empresa: c.empresa,
         numero: c.numero, dataEmissao: c.data_emissao, dataVencimento: c.data_vencimento,
         status: calcularStatus(c.data_vencimento), excluidoEm: c.excluido_em, diasRestantes,
+        observacao: c.observacao, anoCarteirinha: c.ano_carteirinha,
       };
     })
     .filter((c): c is CertificadoLixeira => c !== null)
@@ -372,7 +387,7 @@ export type HistoricoCertificado = CertificadoLista & { excluido: boolean };
 export async function buscarHistoricoColaborador(colaboradorId: string): Promise<HistoricoCertificado[]> {
   const { data, error } = await supabase
     .from("certificados")
-    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, excluido")
+    .select("id::text, colaborador_id::text, tipo_id::text, empresa, numero, data_emissao, data_vencimento, excluido, observacao, ano_carteirinha")
     .eq("colaborador_id", colaboradorId);
   if (error) throw new Error(`Não consegui buscar o histórico: ${error.message}`);
   const linhas = (data || []) as unknown as (CertificadoRaw & { excluido: boolean | null })[];
@@ -392,6 +407,7 @@ export async function buscarHistoricoColaborador(colaboradorId: string): Promise
         tipoId: c.tipo_id, tipoNome: tipo.nome, categoria: tipo.categoria, empresa: c.empresa,
         numero: c.numero, dataEmissao: c.data_emissao, dataVencimento: c.data_vencimento,
         status: calcularStatus(c.data_vencimento), excluido: Boolean(c.excluido),
+        observacao: c.observacao, anoCarteirinha: c.ano_carteirinha,
       };
     })
     .filter((c): c is HistoricoCertificado => c !== null)

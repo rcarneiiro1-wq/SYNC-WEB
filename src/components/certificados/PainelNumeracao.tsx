@@ -34,6 +34,7 @@ export function PainelNumeracao({
   const [busca, setBusca] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [ultimoLancado, setUltimoLancado] = useState<string | null>(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [pagina, setPagina] = useState(1);
   const [itensPorPagina, setItensPorPagina] = useState(10);
@@ -50,7 +51,6 @@ export function PainelNumeracao({
     setSalvando(true);
     const resultado = await salvarNumeracao({
       categoria,
-      numero: proximoNumero,
       descricao: descricao || null,
       dataEmissao: dataEmissao || null,
       validade: validade || null,
@@ -61,6 +61,7 @@ export function PainelNumeracao({
       setErro(resultado.erro);
       return;
     }
+    setUltimoLancado(resultado.numero ? `${categoria} ${resultado.numero}` : null);
     setDescricao("");
     setColaboradorId("");
     setDataEmissao("");
@@ -101,6 +102,7 @@ export function PainelNumeracao({
       <form onSubmit={lancar} className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-3">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Registrar NR/PE emitida</p>
         {erro && <p className="text-sm text-vermelho">{erro}</p>}
+        {ultimoLancado && <p className="text-sm text-verde font-semibold">Lançado: {ultimoLancado}</p>}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Categoria</label>
@@ -114,7 +116,7 @@ export function PainelNumeracao({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Próximo número</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Próximo número (estimado)</label>
             <p className="px-3 py-2 text-sm font-bold text-navy">{proximoNumero}</p>
           </div>
           <div className="col-span-2 md:col-span-2">
@@ -166,14 +168,14 @@ export function PainelNumeracao({
           disabled={salvando}
           className="inline-flex items-center gap-1.5 bg-azul text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-azul/90 transition-colors disabled:opacity-50 cursor-pointer"
         >
-          <Plus size={15} /> {salvando ? "Lançando..." : `Lançar ${categoria} ${proximoNumero}`}
+          <Plus size={15} /> {salvando ? "Lançando..." : `Lançar ${categoria} (~${proximoNumero})`}
         </button>
       </form>
 
       <div className="bg-azul/5 border border-azul/20 rounded-xl p-4 flex gap-2.5">
         <Info size={16} className="text-azul shrink-0 mt-0.5" />
         <p className="text-xs text-azul/90 leading-relaxed">
-          <strong>Como funciona:</strong> toda vez que você clicar em &quot;Lançar&quot;, o número da sequência (NR ou PE) sobe sozinho - nunca repete e nunca pula.
+          <strong>Como funciona:</strong> toda vez que você clicar em &quot;Lançar&quot;, o número da sequência (NR ou PE) sobe sozinho - nunca repete e nunca pula, mesmo lançando vários em sequência rápida.
         </p>
       </div>
       </div>

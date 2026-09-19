@@ -36,7 +36,9 @@ export function MeusDocumentosPessoais() {
 
   useEffect(() => {
     buscarMeusDocumentos()
-      .then((r) => setDados(r.vinculado ? r.dados : { gruposRdo: [], relatoriosEmbarque: [] }))
+      .then((r) => {
+        setDados(r.vinculado ? r.dados : { gruposRdo: [], relatoriosEmbarque: [] });
+      })
       .catch(() => setErro(true))
       .finally(() => setCarregando(false));
   }, []);

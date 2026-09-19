@@ -23,6 +23,7 @@ import {
   Menu,
   User,
   Folder,
+  Radar,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -308,6 +309,19 @@ export function Sidebar({
 
           {ehAdmin && (
             <>
+              <DivisorLateral />
+              <TituloSecao titulo="Radar" />
+              <Link
+                href="/radar"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <Radar size={18} className="shrink-0" />
+                <span>Sistema de Atendimentos Internos</span>
+              </Link>
+
               <DivisorLateral />
               <TituloSecao titulo="Administração" />
               <Link href="/admin" className={classeLink(pathname === "/admin", "vermelho")} onClick={() => setMenuAberto(false)}>
