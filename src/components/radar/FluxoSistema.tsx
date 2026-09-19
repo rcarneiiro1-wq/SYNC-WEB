@@ -5,12 +5,14 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
+  Boxes,
   CheckCircle2,
   FileArchive,
   FileCode2,
   FileText,
   MessageCircle,
   RotateCcw,
+  UserPlus,
 } from "lucide-react";
 import estilos from "./FluxoSistema.module.css";
 
@@ -178,6 +180,20 @@ function Bolha({ mensagem }: { mensagem: Mensagem }) {
 
 export function FluxoSistema() {
   const [passo, setPasso] = useState<Passo>(1);
+  const [puxando, setPuxando] = useState(false);
+
+  function reiniciar() {
+    setPasso(1);
+    setPuxando(false);
+  }
+
+  function puxarAtendimento() {
+    // mesmo "puxar" da Fila do Setor (ver AtendimentosInternosPrototype) -
+    // um instante de "Você puxou" antes de abrir a conversa, só pra dar
+    // o feedback de quem clicou virou o Gustavo pegando o atendimento
+    setPuxando(true);
+    setTimeout(() => setPasso(2), 550);
+  }
 
   return (
     <div className={estilos.wrap}>
@@ -188,10 +204,10 @@ export function FluxoSistema() {
             <div className={passo === 2 ? estilos.stepDotActive : estilos.stepDot}>2</div>
           </div>
           <span className={estilos.stepLabel}>
-            {passo === 1 ? "Novo atendimento" : "Atendimento com histórico"}
+            {passo === 1 ? "Fila do setor" : "Atendimento com histórico"}
           </span>
         </div>
-        <button type="button" className={estilos.restartBtn} onClick={() => setPasso(1)}>
+        <button type="button" className={estilos.restartBtn} onClick={reiniciar}>
           <RotateCcw size={13} />
           Reiniciar
         </button>
@@ -203,33 +219,61 @@ export function FluxoSistema() {
             <span className={estilos.step1Eyebrow}>Exemplo guiado · Levantamento GRAN</span>
             <h2 className={estilos.step1Title}>O Uilian acabou de abrir um atendimento</h2>
             <p className={estilos.step1Desc}>
-              A GRAN sinalizou levantamento pendente de alguns spools. Veja como o atendimento passa de
-              setor em setor até o cliente receber a resposta final.
+              Caiu agora na fila do setor de Levantamento. Puxe como se fosse o Gustavo pra ver o
+              atendimento tramitar até a resposta final pro cliente.
             </p>
 
-            <div className={estilos.novoTicket}>
-              <span className={estilos.novoBadge}>NOVO</span>
-              <div className={estilos.setor}>Levantamento · #ATD-1051</div>
-              <div className={estilos.titulo}>Levantamento de spools — Cliente GRAN</div>
-              <div className={estilos.meta}>
-                <span>Aberto por Uilian</span>
-                <span>Hoje, 08:12</span>
-                <span>Prioridade alta</span>
+            <div className={estilos.filaMini}>
+              <div className={estilos.filaMiniTop}>
+                <div className={estilos.filaMiniTitleRow}>
+                  <div className={estilos.filaIcon}>
+                    <Boxes size={18} />
+                  </div>
+                  <div>
+                    <div className={estilos.filaMiniTitle}>Fila do setor · Levantamento</div>
+                    <p className={estilos.filaMiniDesc}>Qualquer membro do setor pode puxar.</p>
+                  </div>
+                </div>
+                <span className={estilos.filaCount}>1 atendimento</span>
               </div>
-              <div className={estilos.paraQuem}>
-                <MessageCircle size={15} />
-                Caiu na fila do setor de Levantamento — qualquer um da equipe pode puxar
+
+              <div className={estilos.ticketList}>
+                <div className={`${estilos.ticket} ${estilos.ticketAlta} ${puxando ? estilos.ticketAssumido : ""}`}>
+                  <div className={estilos.ticketMain}>
+                    <div className={`${estilos.ticketPriority} ${estilos.priorityAlta}`}>
+                      <span className={`${estilos.priorityDot} ${estilos.dotAlta}`} />
+                      Alta prioridade
+                    </div>
+                    <div className={estilos.ticketNome}>
+                      <span>Levantamento de spools — GRAN</span>
+                      <span className={estilos.ticketId}>#ATD-1051</span>
+                    </div>
+                    <div className={estilos.ticketMeta}>
+                      <span>Aberto por Uilian</span>
+                      <span>Hoje, 08:12</span>
+                    </div>
+                  </div>
+                  <div className={estilos.ticketRight}>
+                    <span className={`${estilos.priorityPill} ${estilos.pillAlta}`}>Prioritária</span>
+                    {puxando ? (
+                      <span className={estilos.assumidoTag}>
+                        <CheckCircle2 size={14} />
+                        Você puxou
+                      </span>
+                    ) : (
+                      <button type="button" className={estilos.puxarBtn} onClick={puxarAtendimento}>
+                        <UserPlus size={14} />
+                        Puxar atendimento
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-
-            <button type="button" className={estilos.abrirBtn} onClick={() => setPasso(2)}>
-              Abrir atendimento
-              <ArrowRight size={15} />
-            </button>
           </div>
         ) : (
           <>
-            <button type="button" className={estilos.backLink} onClick={() => setPasso(1)}>
+            <button type="button" className={estilos.backLink} onClick={reiniciar}>
               <ArrowLeft size={13} />
               Voltar
             </button>
