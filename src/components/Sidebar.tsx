@@ -24,6 +24,7 @@ import {
   User,
   Folder,
   Radar,
+  Workflow,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -320,6 +321,16 @@ export function Sidebar({
               >
                 <Radar size={18} className="shrink-0" />
                 <span>Sistema de Atendimentos Internos</span>
+              </Link>
+              <Link
+                href="/radar/fluxo"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar/fluxo" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <Workflow size={18} className="shrink-0" />
+                <span>Fluxo do Sistema</span>
               </Link>
 
               <DivisorLateral />
