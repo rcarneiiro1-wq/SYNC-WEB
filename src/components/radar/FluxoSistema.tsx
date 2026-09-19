@@ -66,13 +66,13 @@ const MENSAGENS: Mensagem[] = [
     setor: "Coordenação",
     hora: "08:12",
     texto:
-      "Abrindo atendimento pra GRAN — a plataforma sinalizou levantamento pendente de alguns spools. Gustavo, consegue ir até lá hoje fazer o levantamento?",
+      "Abrindo atendimento pra GRAN — a plataforma sinalizou levantamento pendente de alguns spools. Caiu na fila do setor de Levantamento, quem tiver livre já pode puxar.",
   },
   {
     autor: "Gustavo",
     setor: "Levantamento",
     hora: "08:19",
-    texto: "Bora! Já assumo o atendimento aqui e saio pra GRAN agora. Te aviso assim que chegar.",
+    texto: "Bora, tô livre! Puxei o atendimento aqui e já saio pra GRAN agora. Te aviso assim que chegar.",
   },
   {
     autor: "Gustavo",
@@ -218,7 +218,7 @@ export function FluxoSistema() {
               </div>
               <div className={estilos.paraQuem}>
                 <MessageCircle size={15} />
-                Direcionado para Gustavo, no setor de Levantamento
+                Caiu na fila do setor de Levantamento — qualquer um da equipe pode puxar
               </div>
             </div>
 
