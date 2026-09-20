@@ -7,11 +7,16 @@ import {
   ArrowRight,
   Boxes,
   CheckCircle2,
+  Cloud,
+  Eye,
   FileArchive,
   FileCode2,
   FileText,
+  Layers,
   MessageCircle,
+  Package,
   RotateCcw,
+  Send,
   UserPlus,
 } from "lucide-react";
 import estilos from "./FluxoSistema.module.css";
@@ -53,13 +58,16 @@ function iniciais(autor: Autor): string {
 // Só contexto visual pro Passo 1 - o resto dos setores do pipeline (ver
 // AtendimentosInternosPrototype, seção 01) também tem fila própria, não
 // só o de Levantamento. Números fixos, sem clique - é pra contar a
-// história na apresentação, não interagir.
-const OUTRAS_FILAS: { setor: string; count: number }[] = [
-  { setor: "Nuvem de Pontos", count: 2 },
-  { setor: "Produção", count: 1 },
-  { setor: "Modelagem", count: 3 },
-  { setor: "Revisão", count: 2 },
-  { setor: "RDV & Entrega", count: 1 },
+// história na apresentação, não interagir. Virou card completo (20/09, a
+// pedido do Rafael) porque o plano é deixar essa tela numa TV do
+// escritório, ligada o dia todo, pra galera bater o olho e saber o que
+// tá em aberto em cada setor sem precisar clicar em nada.
+const OUTRAS_FILAS: { setor: string; count: number; icone: ElementType; cor: string; corSoft: string }[] = [
+  { setor: "Nuvem de Pontos", count: 2, icone: Cloud, cor: "var(--blue)", corSoft: "var(--blue-soft)" },
+  { setor: "Produção", count: 1, icone: Package, cor: "var(--amber)", corSoft: "var(--amber-soft)" },
+  { setor: "Modelagem", count: 3, icone: Layers, cor: "var(--accent)", corSoft: "var(--accent-soft)" },
+  { setor: "Revisão", count: 2, icone: Eye, cor: "var(--green)", corSoft: "var(--green-soft)" },
+  { setor: "RDV & Entrega", count: 1, icone: Send, cor: "var(--accent-2)", corSoft: "var(--accent-2-soft)" },
 ];
 
 type Anexo = { nome: string; tipo: string; meta: string; icone: ElementType };
@@ -283,16 +291,52 @@ export function FluxoSistema() {
               </div>
             </div>
 
+            <div className={estilos.exemploOutroSetor}>
+              <span className={estilos.outrasFilasLabel}>Exemplo de atendimento na fila — Modelagem</span>
+              <div className={`${estilos.ticket} ${estilos.ticketMedia}`}>
+                <div className={estilos.ticketMain}>
+                  <div className={`${estilos.ticketPriority} ${estilos.priorityMedia}`}>
+                    <span className={`${estilos.priorityDot} ${estilos.dotMedia}`} />
+                    Média prioridade
+                  </div>
+                  <div className={estilos.ticketNome}>
+                    <span>Modelagem de 4 spools</span>
+                  </div>
+                  <div className={estilos.ticketMeta}>
+                    <span>Empresa OCYAN</span>
+                    <span>Em aberto</span>
+                  </div>
+                </div>
+                <div className={estilos.ticketRight}>
+                  <span className={`${estilos.priorityPill} ${estilos.pillMedia}`}>Média</span>
+                </div>
+              </div>
+            </div>
+
             <div className={estilos.outrasFilas}>
               <span className={estilos.outrasFilasLabel}>Outras filas do escritório agora</span>
               <div className={estilos.outrasFilasRow}>
-                {OUTRAS_FILAS.map((f) => (
-                  <span key={f.setor} className={estilos.filaChip}>
-                    <span className={estilos.filaChipDot} />
-                    {f.setor}
-                    <span className={estilos.filaChipCount}>{f.count}</span>
-                  </span>
-                ))}
+                {OUTRAS_FILAS.map((f) => {
+                  const Icone = f.icone;
+                  return (
+                    <div key={f.setor} className={estilos.filaOutroCard} style={{ borderTopColor: f.cor }}>
+                      <div className={estilos.filaOutroTop}>
+                        <div className={estilos.filaOutroIcon} style={{ color: f.cor, background: f.corSoft }}>
+                          <Icone size={16} />
+                        </div>
+                        <span className={estilos.filaOutroNome}>{f.setor}</span>
+                      </div>
+                      <div className={estilos.filaOutroCountRow}>
+                        <span className={estilos.filaOutroCount} style={{ color: f.cor }}>
+                          {f.count}
+                        </span>
+                        <span className={estilos.filaOutroCountLabel}>
+                          {f.count === 1 ? "atendimento" : "atendimentos"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <p className={estilos.outrasFilasHint}>Cada setor tem a própria fila — essas aqui ainda não têm tela própria neste protótipo.</p>
             </div>

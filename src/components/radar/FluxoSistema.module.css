@@ -161,6 +161,7 @@
   transition: opacity 0.2s;
 }
 .ticketAlta { border-left-color: var(--red); }
+.ticketMedia { border-left-color: var(--amber); }
 .ticketAssumido { opacity: 0.6; }
 
 .ticketMain { min-width: 0; flex: 1; }
@@ -175,6 +176,8 @@
 .priorityDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .dotAlta { background: var(--red); color: var(--red); }
 .priorityAlta { color: var(--red); }
+.dotMedia { background: var(--amber); color: var(--amber); }
+.priorityMedia { color: var(--amber); }
 
 .ticketNome { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .ticketNome span:first-child { font-size: 14.5px; font-weight: 600; color: var(--ink); }
@@ -202,6 +205,7 @@
   white-space: nowrap;
 }
 .pillAlta { background: var(--red-soft); color: var(--red); }
+.pillMedia { background: var(--amber-soft); color: var(--amber); }
 
 .puxarBtn {
   display: inline-flex;
@@ -247,31 +251,46 @@
   letter-spacing: 0.05em;
   margin-bottom: 10px;
 }
-.outrasFilasRow { display: flex; flex-wrap: wrap; gap: 8px; }
-.filaChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  padding: 7px 8px 7px 11px;
-  border-radius: 999px;
-}
-.filaChipDot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); flex-shrink: 0; }
-.filaChipCount {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--ink);
+.outrasFilasRow { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Card por setor (20/09) - mesma família visual do .ticket principal
+   (fundo, borda, cantos), só que sem prioridade nem botão de ação: é
+   só pra bater o olho, pensado pra ficar numa TV do escritório. A cor
+   de cada setor entra via style inline (border-top e o ícone), vinda
+   de OUTRAS_FILAS no .tsx - assim dá pra adicionar setor novo sem
+   precisar mexer no CSS. */
+.filaOutroCard {
+  flex: 0 1 128px;
+  min-width: 128px;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  padding: 2px 8px;
-  border-radius: 999px;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: var(--shadow);
 }
-.outrasFilasHint { font-size: 11px; color: var(--ink-faint); margin: 10px 0 0; }
+.filaOutroTop { display: flex; align-items: center; gap: 8px; }
+.filaOutroIcon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.filaOutroNome { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.filaOutroCountRow { display: flex; align-items: baseline; gap: 6px; }
+.filaOutroCount { font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: 700; line-height: 1; }
+.filaOutroCountLabel { font-size: 11px; color: var(--ink-soft); }
+
+.outrasFilasHint { font-size: 11px; color: var(--ink-faint); margin: 12px 0 0; }
+
+/* Um exemplo de ticket "aberto" de verdade (20/09, a pedido do Rafael) -
+   mesma família visual do ticket principal, só que sem botão nenhum,
+   só ilustrando o que teria dentro da fila de outro setor. */
+.exemploOutroSetor { max-width: 640px; margin: 18px auto 0; text-align: left; }
 
 /* ---------- Passo 2: conversa do atendimento ---------- */
 .chatHeader {
