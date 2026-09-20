@@ -19,6 +19,12 @@ export type EmbarqueAdmin = {
   statusFinal: string | null;
   totalRdos: number;
   totalAnexos: number;
+  /** Data do RDO mais recente lançado nesse embarque (ou null se nenhum
+   * RDO ainda) - usada como sugestão de data de encerramento quando o
+   * admin precisa fechar um embarque que a pessoa esqueceu de encerrar
+   * (ver `encerrarEmbarque` em adminActions.ts, pedido do Rafael 20/09
+   * depois do caso do Eduardo). */
+  ultimoRdoData: string | null;
 };
 
 /** Todos os embarques (ativos e finalizados) com contagem de RDOs/anexos -
@@ -41,20 +47,28 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
 
   const [{ data: obrasRaw }, { data: rdosRaw }, { data: anexosRaw }] = await Promise.all([
     supabase.from("obras").select("id::text, nome, empresa").in("id", idsObras.length ? idsObras : ["-1"]),
-    supabase.from("rdos").select("embarque_id::text").in("embarque_id", idsEmbarques),
+    supabase.from("rdos").select("embarque_id::text, data").in("embarque_id", idsEmbarques),
     supabase.from("anexos_embarque").select("embarque_id::text").in("embarque_id", idsEmbarques),
   ]);
 
   const obrasTyped = (obrasRaw || []) as unknown as { id: string; nome: string | null; empresa: string | null }[];
   const empresaPorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.empresa]));
   const nomePorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.nome]));
+  const rdosTyped = (rdosRaw || []) as unknown as { embarque_id: string; data: string | null }[];
   const contarPor = (linhas: { embarque_id: string }[] | null) => {
     const mapa = new Map<string, number>();
     for (const l of linhas || []) mapa.set(l.embarque_id, (mapa.get(l.embarque_id) || 0) + 1);
     return mapa;
   };
-  const totalRdosPorEmbarque = contarPor((rdosRaw || []) as unknown as { embarque_id: string }[]);
+  const totalRdosPorEmbarque = contarPor(rdosTyped);
   const totalAnexosPorEmbarque = contarPor((anexosRaw || []) as unknown as { embarque_id: string }[]);
+
+  const ultimoRdoPorEmbarque = new Map<string, string | null>();
+  for (const r of rdosTyped) {
+    if (!r.data) continue;
+    const atual = ultimoRdoPorEmbarque.get(r.embarque_id);
+    if (!atual || r.data > atual) ultimoRdoPorEmbarque.set(r.embarque_id, r.data);
+  }
 
   return embarques.map((e) => ({
     id: e.id,
@@ -68,6 +82,7 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
     statusFinal: e.status_final,
     totalRdos: totalRdosPorEmbarque.get(e.id) || 0,
     totalAnexos: totalAnexosPorEmbarque.get(e.id) || 0,
+    ultimoRdoData: ultimoRdoPorEmbarque.get(e.id) ?? null,
   }));
 }
 
