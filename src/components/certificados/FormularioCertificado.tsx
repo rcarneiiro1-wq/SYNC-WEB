@@ -33,6 +33,8 @@ export function FormularioCertificado({
   const [dataEmissao, setDataEmissao] = useState(certificadoExistente?.dataEmissao || "");
   const [dataVencimento, setDataVencimento] = useState(certificadoExistente?.dataVencimento || "");
   const [vencimentoTocadoManualmente, setVencimentoTocadoManualmente] = useState(Boolean(certificadoExistente?.dataVencimento));
+  const [anoCarteirinha, setAnoCarteirinha] = useState(certificadoExistente?.anoCarteirinha || "");
+  const [observacao, setObservacao] = useState(certificadoExistente?.observacao || "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -73,6 +75,8 @@ export function FormularioCertificado({
         numero: numero || null,
         dataEmissao: dataEmissao || null,
         dataVencimento: dataVencimento || null,
+        anoCarteirinha: anoCarteirinha || null,
+        observacao: observacao || null,
       },
       certificadoExistente?.id || null
     );
@@ -163,6 +167,29 @@ export function FormularioCertificado({
               setVencimentoTocadoManualmente(true);
               setDataVencimento(aplicarMascaraData(ev.target.value));
             }}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Ano da carteirinha (se aplicável)</label>
+          <input
+            type="text"
+            inputMode="numeric"
+            placeholder="Ex: 2026"
+            value={anoCarteirinha}
+            onChange={(ev) => setAnoCarteirinha(ev.target.value.replace(/\D/g, "").slice(0, 4))}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
+          />
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Observação</label>
+          <input
+            type="text"
+            value={observacao}
+            onChange={(ev) => setObservacao(ev.target.value)}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
           />
         </div>

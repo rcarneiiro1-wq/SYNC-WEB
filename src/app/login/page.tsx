@@ -49,7 +49,7 @@ export default async function PaginaLogin({
         </span>
 
         <p className="relative z-10 mt-10 md:mt-16 text-white/30 text-xs">
-          Developed by Rafael Carneiro
+          Developed by Núcleo Sync
         </p>
       </div>
 

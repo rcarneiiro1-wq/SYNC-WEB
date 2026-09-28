@@ -48,8 +48,15 @@ export function periodoAdjacente(periodo: Periodo, tipo: "calendario" | "fechame
 }
 
 /** Quantos dias (inclusive) as duas faixas de data têm em comum - 0 se não
- * se cruzam de jeito nenhum. */
-function diasSobrepostos(inicioA: string, fimA: string, inicioB: string, fimB: string): number {
+ * se cruzam de jeito nenhum.
+ *
+ * Exportada (11/09) pra ser reaproveitada pelo painel do colaborador
+ * (painelColaborador.ts) - é a MESMA conta de diária usada no relatório
+ * por empresa, só que aplicada a um colaborador só em vez de somar todo
+ * mundo. Reaproveitar em vez de duplicar evita as duas contas divergirem
+ * um dia (a lógica de "fim real do embarque" logo abaixo tem uma
+ * nuance sutil - ver comentário de `intervaloRealDoEmbarque`). */
+export function diasSobrepostos(inicioA: string, fimA: string, inicioB: string, fimB: string): number {
   const maxInicio = inicioA > inicioB ? inicioA : inicioB;
   const minFim = fimA < fimB ? fimA : fimB;
   if (maxInicio > minFim) return 0;
@@ -60,8 +67,9 @@ function diasSobrepostos(inicioA: string, fimA: string, inicioB: string, fimB: s
 /** Intervalo real de um embarque (início mais antigo entre o clique
  * administrativo e os RDOs; fim é a data de encerramento - ou, pra quem
  * ainda está embarcado, "hoje", pra poder contar as diárias já feitas
- * até agora dentro do período pedido). */
-function intervaloRealDoEmbarque(embarque: Embarque, rdos: Rdo[]): { inicio: string | null; fim: string } {
+ * até agora dentro do período pedido). Exportada pelo mesmo motivo do
+ * `diasSobrepostos` acima. */
+export function intervaloRealDoEmbarque(embarque: Embarque, rdos: Rdo[]): { inicio: string | null; fim: string } {
   const datasInicio = [embarque.data_inicio, ...rdos.map((r) => r.data)]
     .filter((d): d is string => Boolean(d)).map((d) => d.slice(0, 10));
   const inicio = datasInicio.length > 0 ? datasInicio.reduce((a, b) => (a < b ? a : b)) : null;

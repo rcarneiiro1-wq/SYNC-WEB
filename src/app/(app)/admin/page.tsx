@@ -1,16 +1,18 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ShieldAlert, Ship, Building2, Users, Award, UserPlus, Clock } from "lucide-react";
+import { ShieldAlert, Ship, Building2, Users, Award, UserPlus, Clock, Eye } from "lucide-react";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import {
   buscarEmbarquesAdmin, buscarObrasAdmin, buscarUsuariosAdmin, buscarHistoricoLoginAdmin,
+  buscarNavegacaoAdmin,
 } from "@/lib/admin";
 import { PainelEmbarquesAdmin } from "@/components/admin/PainelEmbarquesAdmin";
 import { PainelObrasAdmin } from "@/components/admin/PainelObrasAdmin";
 import { PainelUsuariosAdmin } from "@/components/admin/PainelUsuariosAdmin";
 import { PainelCertificadosAdmin } from "@/components/admin/PainelCertificadosAdmin";
 import { PainelHistoricoLoginAdmin } from "@/components/admin/PainelHistoricoLoginAdmin";
+import { PainelNavegacaoAdmin } from "@/components/admin/PainelNavegacaoAdmin";
 
 /** Painel do administrador - só o "admin" (ou quem tiver eh_admin=true)
  * enxerga essa página. Dá autonomia pra excluir DE VERDADE embarques de
@@ -27,11 +29,18 @@ export default async function PaginaAdmin() {
     redirect("/");
   }
 
-  const [embarques, obras, usuarios, historicoLogin] = await Promise.all([
+  // 11/09: rastro de navegação (quem foi em qual tela) é só pro Rafael
+  // ver - mesmo outro admin (ex: o usuário genérico "admin") não enxerga
+  // essa seção. Por isso nem busca esse dado se não for ele: evita gasto
+  // à toa e mantém a real restrição também na leitura, não só na tela.
+  const ehRafael = sessao.usuario === "Rafael";
+
+  const [embarques, obras, usuarios, historicoLogin, navegacao] = await Promise.all([
     buscarEmbarquesAdmin(),
     buscarObrasAdmin(),
     buscarUsuariosAdmin(),
     buscarHistoricoLoginAdmin(),
+    ehRafael ? buscarNavegacaoAdmin() : Promise.resolve([]),
   ]);
 
   return (
@@ -88,12 +97,21 @@ export default async function PaginaAdmin() {
         <PainelCertificadosAdmin />
       </section>
 
-      <section className="mt-10 mb-10">
+      <section className={`mt-10 ${ehRafael ? "" : "mb-10"}`}>
         <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
           <Clock size={16} /> Histórico de login
         </h2>
         <PainelHistoricoLoginAdmin historico={historicoLogin} />
       </section>
+
+      {ehRafael && (
+        <section className="mt-10 mb-10">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-navy uppercase tracking-wide mb-3">
+            <Eye size={16} /> Navegação (só você vê)
+          </h2>
+          <PainelNavegacaoAdmin navegacao={navegacao} />
+        </section>
+      )}
     </main>
   );
 }

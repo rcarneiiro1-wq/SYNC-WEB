@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { criarClienteAdmin } from "@/lib/supabase-admin";
 
 // Leituras usadas só pelo Painel Admin (/admin) - não tem relação de chave
 // estrangeira configurada no Postgres entre essas tabelas (é tudo ligado
@@ -18,6 +19,12 @@ export type EmbarqueAdmin = {
   statusFinal: string | null;
   totalRdos: number;
   totalAnexos: number;
+  /** Data do RDO mais recente lançado nesse embarque (ou null se nenhum
+   * RDO ainda) - usada como sugestão de data de encerramento quando o
+   * admin precisa fechar um embarque que a pessoa esqueceu de encerrar
+   * (ver `encerrarEmbarque` em adminActions.ts, pedido do Rafael 20/09
+   * depois do caso do Eduardo). */
+  ultimoRdoData: string | null;
 };
 
 /** Todos os embarques (ativos e finalizados) com contagem de RDOs/anexos -
@@ -40,20 +47,28 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
 
   const [{ data: obrasRaw }, { data: rdosRaw }, { data: anexosRaw }] = await Promise.all([
     supabase.from("obras").select("id::text, nome, empresa").in("id", idsObras.length ? idsObras : ["-1"]),
-    supabase.from("rdos").select("embarque_id::text").in("embarque_id", idsEmbarques),
+    supabase.from("rdos").select("embarque_id::text, data").in("embarque_id", idsEmbarques),
     supabase.from("anexos_embarque").select("embarque_id::text").in("embarque_id", idsEmbarques),
   ]);
 
   const obrasTyped = (obrasRaw || []) as unknown as { id: string; nome: string | null; empresa: string | null }[];
   const empresaPorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.empresa]));
   const nomePorObra = new Map<string, string | null>(obrasTyped.map((o) => [o.id, o.nome]));
+  const rdosTyped = (rdosRaw || []) as unknown as { embarque_id: string; data: string | null }[];
   const contarPor = (linhas: { embarque_id: string }[] | null) => {
     const mapa = new Map<string, number>();
     for (const l of linhas || []) mapa.set(l.embarque_id, (mapa.get(l.embarque_id) || 0) + 1);
     return mapa;
   };
-  const totalRdosPorEmbarque = contarPor((rdosRaw || []) as unknown as { embarque_id: string }[]);
+  const totalRdosPorEmbarque = contarPor(rdosTyped);
   const totalAnexosPorEmbarque = contarPor((anexosRaw || []) as unknown as { embarque_id: string }[]);
+
+  const ultimoRdoPorEmbarque = new Map<string, string | null>();
+  for (const r of rdosTyped) {
+    if (!r.data) continue;
+    const atual = ultimoRdoPorEmbarque.get(r.embarque_id);
+    if (!atual || r.data > atual) ultimoRdoPorEmbarque.set(r.embarque_id, r.data);
+  }
 
   return embarques.map((e) => ({
     id: e.id,
@@ -67,6 +82,7 @@ export async function buscarEmbarquesAdmin(): Promise<EmbarqueAdmin[]> {
     statusFinal: e.status_final,
     totalRdos: totalRdosPorEmbarque.get(e.id) || 0,
     totalAnexos: totalAnexosPorEmbarque.get(e.id) || 0,
+    ultimoRdoData: ultimoRdoPorEmbarque.get(e.id) ?? null,
   }));
 }
 
@@ -164,6 +180,43 @@ export async function buscarHistoricoLoginAdmin(): Promise<LoginHistoricoAdmin[]
   if (error) throw new Error(`Não consegui buscar o histórico de login: ${error.message}`);
   return ((data || []) as unknown as { usuario: string; nome: string; origem: string; logado_em: string }[]).map(
     (l) => ({ usuario: l.usuario, nome: l.nome, origem: l.origem, logadoEm: l.logado_em })
+  );
+}
+
+export type NavegacaoAdmin = {
+  usuario: string;
+  nome: string;
+  pagina: string;
+  quando: string;
+};
+
+/** Tem que bater com DIAS_RETENCAO_NAVEGACAO de lib/historicoNavegacao.ts
+ * (é lá que a limpeza automática acontece - aqui é só mais um filtro de
+ * segurança, igual o padrão do histórico de login acima). */
+const DIAS_HISTORICO_NAVEGACAO = 15;
+const LIMITE_LINHAS_NAVEGACAO = 5000;
+
+/** Rastro de navegação (site) dos últimos DIAS_HISTORICO_NAVEGACAO dias -
+ * tabela "historico_navegacao", uma linha por troca de tela. Pedido do
+ * Rafael em 11/09 pra ele acompanhar o que cada pessoa foi ver, "só pra
+ * ele" - por isso, diferente de toda outra leitura desse arquivo, essa
+ * usa o cliente ADMIN (service_role): a tabela não tem NENHUMA policy
+ * pública de leitura de propósito (ver a migration), então a chave anon
+ * simplesmente não alcança esses dados - só quem chama essa função aqui
+ * do servidor consegue ler. A tela que exibe isso (admin/page.tsx) ainda
+ * restringe de novo por cima, só pro usuário "Rafael" mesmo. */
+export async function buscarNavegacaoAdmin(): Promise<NavegacaoAdmin[]> {
+  const limite = new Date(Date.now() - DIAS_HISTORICO_NAVEGACAO * 24 * 60 * 60 * 1000).toISOString();
+  const admin = criarClienteAdmin();
+  const { data, error } = await admin
+    .from("historico_navegacao")
+    .select("usuario, nome, pagina, quando")
+    .gte("quando", limite)
+    .order("quando", { ascending: false })
+    .limit(LIMITE_LINHAS_NAVEGACAO);
+  if (error) throw new Error(`Não consegui buscar o histórico de navegação: ${error.message}`);
+  return ((data || []) as unknown as { usuario: string; nome: string; pagina: string; quando: string }[]).map(
+    (n) => ({ usuario: n.usuario, nome: n.nome, pagina: n.pagina, quando: n.quando })
   );
 }
 

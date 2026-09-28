@@ -216,7 +216,7 @@ async function buscarAnexosPorEmbarque(idsEmbarques: string[]): Promise<Map<stri
   if (idsEmbarques.length === 0) return mapa;
   const { data, error } = await supabase
     .from("anexos_embarque")
-    .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em")
+    .select("id::text, embarque_id::text, nome_arquivo, url_nuvem, enviado_por, enviado_em, tipo, assinado")
     .in("embarque_id", idsEmbarques)
     .order("enviado_em", { ascending: false });
   if (error || !data) return mapa;
@@ -227,12 +227,15 @@ async function buscarAnexosPorEmbarque(idsEmbarques: string[]): Promise<Map<stri
     url_nuvem: string | null;
     enviado_por: string | null;
     enviado_em: string | null;
+    tipo: string | null;
+    assinado: boolean | null;
   }[];
   for (const anexo of anexos) {
     const lista = mapa.get(anexo.embarque_id) || [];
     lista.push({
       id: anexo.id, nomeArquivo: anexo.nome_arquivo, url: anexo.url_nuvem,
       enviadoPor: anexo.enviado_por, enviadoEm: anexo.enviado_em,
+      tipo: anexo.tipo, assinado: Boolean(anexo.assinado),
     });
     mapa.set(anexo.embarque_id, lista);
   }
@@ -334,6 +337,12 @@ export type AnexoEmbarque = {
   url: string | null;
   enviadoPor: string | null;
   enviadoEm: string | null;
+  /** 'rdo' ou 'relatorio_embarque' - null pros anexos de antes dessa
+   * classificação existir (ficam em "Anexos do Embarque", sem grupo). */
+  tipo: string | null;
+  /** true só quando quem subiu confirmou que já está assinado pelo fiscal -
+   * só se aplica a upload manual (o PDF de RDO automático nunca marca isso). */
+  assinado: boolean;
 };
 
 export type LinhaHistorico = {

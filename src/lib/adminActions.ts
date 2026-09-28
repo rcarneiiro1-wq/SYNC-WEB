@@ -169,6 +169,102 @@ export async function excluirCertificado(certificadoId: string): Promise<Resulta
   return { sucesso: true };
 }
 
+/** Mesmo esquema de ID usado em `gerarIdAnexo` (anexosActions.ts) e em
+ * `gerar_id_global()` no desktop (modulos/rdo/database.py): horário atual
+ * em milissegundos + dígitos aleatórios no final. Serve pra gerar o `id`
+ * de `historico_embarque` - essa tabela NÃO tem autoincrement no Postgres
+ * (o id é gerado pela aplicação, igual todas as outras tabelas do RDO),
+ * então nunca dá pra deixar o banco gerar sozinho aqui. */
+function gerarIdHistoricoEmbarque(): string {
+  const agora = Date.now().toString();
+  const sufixo = Math.floor(100000 + Math.random() * 900000).toString();
+  return `${agora}${sufixo}`;
+}
+
+export type StatusFinalEmbarque = "completo" | "com_pendencia";
+
+/** Encerra pela web um embarque que a pessoa esqueceu de encerrar no
+ * desktop (caso real do Eduardo, 20/09) - espelha exatamente o que
+ * `encerrar_embarque()` já faz no desktop (modulos/rdo/database.py):
+ * ativo=false, data_fim, status_final, justificativa_encerramento, mais
+ * uma linha em historico_embarque com evento "encerrado", pro rastro
+ * ficar igual não importa de onde o encerramento veio.
+ *
+ * IMPORTANTE (ler antes de mexer): fechar por aqui NÃO chega sozinho no
+ * computador da pessoa (o desktop só sincroniza embarque local -> nuvem,
+ * nunca o contrário, hoje) - esse é só o lado "admin fecha pela web" do
+ * ajuste. O lado "o desktop passa a saber que foi fechado" é uma
+ * atualização separada no SyncERP (puxar o status da nuvem antes de
+ * deixar lançar RDO), combinada em conversa com o Rafael em 20/09.
+ * Existe também uma trava direto no banco (trigger `proteger_reabertura_embarque`,
+ * migration `proteger_reabertura_embarque_sem_reabertura_registrada`) que
+ * recusa qualquer tentativa de virar ativo=false -> true sem um evento
+ * "reaberto" correspondente em historico_embarque - isso é o que impede
+ * uma sincronização desatualizada de reabrir escondido um embarque que
+ * foi encerrado por aqui. */
+export async function encerrarEmbarque(
+  embarqueId: string,
+  dataFim: string,
+  statusFinal: StatusFinalEmbarque,
+  justificativa: string
+): Promise<ResultadoAdmin> {
+  let sessao: SessaoUsuario;
+  try {
+    sessao = await exigirAdmin();
+  } catch (e) {
+    return { sucesso: false, erro: e instanceof Error ? e.message : "Acesso negado." };
+  }
+  if (!embarqueId) return { sucesso: false, erro: "Embarque não identificado." };
+  if (!dataFim) return { sucesso: false, erro: "Informe a data de encerramento." };
+  if (statusFinal !== "completo" && statusFinal !== "com_pendencia") {
+    return { sucesso: false, erro: "Situação final inválida." };
+  }
+  if (!justificativa || !justificativa.trim()) {
+    return { sucesso: false, erro: "A justificativa é obrigatória - explique por que está encerrando pela web." };
+  }
+
+  const admin = criarClienteAdmin();
+
+  const { data: embarque } = await admin
+    .from("embarques")
+    .select("ativo")
+    .eq("id", embarqueId)
+    .maybeSingle();
+  if (!embarque) return { sucesso: false, erro: "Embarque não encontrado." };
+  if (!embarque.ativo) return { sucesso: false, erro: "Esse embarque já está encerrado." };
+
+  const { error: erroEmbarque } = await admin
+    .from("embarques")
+    .update({
+      ativo: false,
+      data_fim: dataFim,
+      status_final: statusFinal,
+      justificativa_encerramento: justificativa.trim(),
+    })
+    .eq("id", embarqueId);
+  if (erroEmbarque) return { sucesso: false, erro: `Não consegui encerrar: ${erroEmbarque.message}` };
+
+  try {
+    await admin.from("historico_embarque").insert({
+      id: gerarIdHistoricoEmbarque(),
+      embarque_id: embarqueId,
+      evento: "encerrado",
+      data_evento: new Date().toISOString(),
+      usuario: sessao.nome,
+      justificativa: justificativa.trim(),
+    });
+  } catch {
+    // não trava o encerramento por causa do registro de histórico - o
+    // embarque já fechou, que é o que importa; o rastro é um extra
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/embarques/ativos");
+  revalidatePath("/historico");
+  revalidatePath("/relatorios");
+  return { sucesso: true };
+}
+
 /** Wrapper "use server" pra buscar certificados a partir do componente
  * client do painel (busca em tempo real, sem recarregar a página) - a
  * leitura em si mora em lib/admin.ts, aqui só confere admin e repassa. */

@@ -1,0 +1,441 @@
+/* "Fluxo do Sistema" (19/09, a pedido do Rafael) - modo apresentação de 2
+   passos dentro do Radar: Passo 1 mostra o atendimento recém-aberto na
+   fila do setor; Passo 2 é a conversa completa do exemplo real da GRAN,
+   do Uilian abrindo até o Zé fechando com o cliente. Mesma paleta
+   "blueprint" escura fixa do resto do Radar (ver
+   AtendimentosInternosPrototype.module.css) - duplicada aqui de
+   propósito (arquivo pequeno, não vale a pena compartilhar token file
+   ainda com só 2 consumidores). */
+
+.wrap {
+  --bg: #0D2740;
+  --surface: #123253;
+  --surface-2: #0F2C4A;
+  --ink: #E8F1FA;
+  --ink-soft: #9FBFDD;
+  --ink-faint: #6E8DAD;
+  --accent: #FF9152;
+  --accent-soft: rgba(255, 145, 82, 0.14);
+  --accent-2: #5FE0BE;
+  --accent-2-soft: rgba(95, 224, 190, 0.14);
+  --violet: #A78BFA;
+  --violet-soft: rgba(167, 139, 250, 0.16);
+  --blue: #4C8DFF;
+  --blue-soft: rgba(76, 141, 255, 0.14);
+  --amber: #F5B942;
+  --amber-soft: rgba(245, 185, 66, 0.14);
+  --green: #3DDC97;
+  --green-soft: rgba(61, 220, 151, 0.14);
+  --border: rgba(232, 241, 250, 0.16);
+  --border-strong: rgba(232, 241, 250, 0.30);
+  --grid-line: rgba(232, 241, 250, 0.05);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+
+  background:
+    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 28px),
+    var(--bg);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+  border-radius: 16px;
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wrap * { box-sizing: border-box; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+/* ---------- Barra de passos ---------- */
+.stepBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.stepIndicator { display: flex; align-items: center; gap: 10px; }
+.stepDots { display: flex; gap: 6px; }
+.stepDot {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; font-weight: 700;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border-strong);
+  color: var(--ink-faint);
+}
+.stepDotActive { background: var(--blue); border-color: var(--blue); color: #fff; }
+.stepDotDone { background: var(--accent-2-soft); border-color: var(--accent-2); color: var(--accent-2); }
+.stepLabel {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.restartBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.restartBtn:hover { color: var(--ink); border-color: var(--border-strong); }
+
+.body { flex: 1; padding: 28px 24px 32px; }
+
+/* ---------- Passo 1: fila do setor de Levantamento ---------- */
+.step1 { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 14px 16px 26px; max-width: 520px; margin: 0 auto; }
+.step1Eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; color: var(--violet); text-transform: uppercase; margin-bottom: 10px; }
+.step1Title { font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 700; font-size: 22px; margin: 0 0 8px; }
+.step1Desc { font-size: 13.5px; color: var(--ink-soft); margin: 0; }
+
+/* Painel "Fila do setor" - versão enxuta da tela cheia (ver
+   AtendimentosInternosPrototype.module.css .filaCard e vizinhos),
+   duplicada aqui de propósito, só que com 1 atendimento fixo (o
+   exemplo da GRAN) pra deixar o clique em "Puxar atendimento" abrir
+   direto a conversa do Passo 2 - em vez de um botão genérico "abrir". */
+.filaMini { max-width: 640px; margin: 0 auto; text-align: left; }
+.filaMiniTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.filaMiniTitleRow { display: flex; align-items: center; gap: 10px; }
+.filaIcon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.filaMiniTitle {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--violet);
+  text-transform: uppercase;
+}
+.filaMiniDesc { font-size: 12.5px; color: var(--ink-soft); margin: 2px 0 0; }
+.filaCount {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ticketList { display: flex; flex-direction: column; gap: 10px; }
+.ticket {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 15px 17px;
+  box-shadow: var(--shadow);
+  transition: opacity 0.2s;
+}
+.ticketAlta { border-left-color: var(--red); }
+.ticketMedia { border-left-color: var(--amber); }
+.ticketAssumido { opacity: 0.6; }
+
+.ticketMain { min-width: 0; flex: 1; }
+.ticketPriority {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.priorityDot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.dotAlta { background: var(--red); color: var(--red); }
+.priorityAlta { color: var(--red); }
+.dotMedia { background: var(--amber); color: var(--amber); }
+.priorityMedia { color: var(--amber); }
+
+.ticketNome { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.ticketNome span:first-child { font-size: 14.5px; font-weight: 600; color: var(--ink); }
+.ticketId {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.ticketMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.ticketRight { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.priorityPill {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pillAlta { background: var(--red-soft); color: var(--red); }
+.pillMedia { background: var(--amber-soft); color: var(--amber); }
+
+.puxarBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--blue);
+  border: none;
+  padding: 10px 15px;
+  border-radius: 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.15s, transform 0.1s;
+}
+.puxarBtn:hover { filter: brightness(1.12); }
+.puxarBtn:active { transform: scale(0.97); }
+.assumidoTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-2);
+  background: var(--accent-2-soft);
+  padding: 10px 15px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+/* Fileira de "outras filas" - só contexto pra história na apresentação
+   (pedido do Rafael: mostrar que cada setor tem a própria fila, não só
+   o de Levantamento). Nenhum clique aqui, de propósito. */
+.outrasFilas { max-width: 640px; margin: 20px auto 0; }
+.outrasFilasLabel {
+  display: block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.outrasFilasRow { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Card por setor (20/09) - mesma família visual do .ticket principal
+   (fundo, borda, cantos), só que sem prioridade nem botão de ação: é
+   só pra bater o olho, pensado pra ficar numa TV do escritório. A cor
+   de cada setor entra via style inline (border-top e o ícone), vinda
+   de OUTRAS_FILAS no .tsx - assim dá pra adicionar setor novo sem
+   precisar mexer no CSS. */
+.filaOutroCard {
+  flex: 0 1 128px;
+  min-width: 128px;
+  max-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 13px 14px;
+  box-shadow: var(--shadow);
+}
+.filaOutroTop { display: flex; align-items: center; gap: 8px; }
+.filaOutroIcon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.filaOutroNome { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.25; }
+.filaOutroCountRow { display: flex; align-items: baseline; gap: 6px; }
+.filaOutroCount { font-family: "IBM Plex Mono", monospace; font-size: 26px; font-weight: 700; line-height: 1; }
+.filaOutroCountLabel { font-size: 11px; color: var(--ink-soft); }
+
+.outrasFilasHint { font-size: 11px; color: var(--ink-faint); margin: 12px 0 0; }
+
+/* Um exemplo de ticket "aberto" de verdade (20/09, a pedido do Rafael) -
+   mesma família visual do ticket principal, só que sem botão nenhum,
+   só ilustrando o que teria dentro da fila de outro setor. */
+.exemploOutroSetor { max-width: 640px; margin: 18px auto 0; text-align: left; }
+
+/* ---------- Passo 2: conversa do atendimento ---------- */
+.chatHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+.chatHeaderLeft { display: flex; align-items: center; gap: 12px; }
+.chatIcon {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  background: var(--violet-soft);
+  color: var(--violet);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.chatTitle { font-size: 15px; font-weight: 700; color: var(--ink); }
+.chatSub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.statusPill {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.statusAndamento { background: var(--blue-soft); color: var(--blue); }
+.statusConcluido { background: var(--accent-2-soft); color: var(--accent-2); }
+
+.thread { display: flex; flex-direction: column; gap: 16px; max-width: 640px; margin: 0 auto; }
+.msg { display: flex; gap: 10px; }
+.msgAvatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px; font-weight: 700;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+}
+.msgBody { min-width: 0; flex: 1; }
+.msgHead { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.msgName { font-size: 12.5px; font-weight: 700; }
+.msgTime { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--ink-faint); }
+.msgSetor {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 5px;
+  margin-left: 2px;
+}
+.bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px 12px 12px 12px;
+  padding: 10px 13px;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+  display: inline-block;
+  max-width: 100%;
+}
+.fileBubble {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 9px 13px;
+}
+.fileIcon {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.fileName { font-size: 12px; font-weight: 600; color: var(--ink); }
+.fileMeta { font-size: 10.5px; color: var(--ink-faint); }
+.repasseTag {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+.finalizadoTag {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  color: var(--accent-2);
+  background: var(--accent-2-soft);
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+
+.composer {
+  max-width: 640px;
+  margin: 22px auto 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.backLink:hover { color: var(--ink); }
+
+@media (max-width: 640px) {
+  .chatHeader { align-items: flex-start; }
+}

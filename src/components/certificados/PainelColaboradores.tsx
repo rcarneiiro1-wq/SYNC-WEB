@@ -27,6 +27,7 @@ function FormularioColaborador({
   const [cpf, setCpf] = useState(colaborador?.cpf || "");
   const [empresa, setEmpresa] = useState(colaborador?.empresa || EMPRESA_PADRAO);
   const [localTrabalho, setLocalTrabalho] = useState(colaborador?.localTrabalho || "");
+  const [tipoSanguineo, setTipoSanguineo] = useState(colaborador?.tipoSanguineo || "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -39,7 +40,10 @@ function FormularioColaborador({
     setErro(null);
     setSalvando(true);
     const resultado = await salvarColaborador(
-      { nome: nome.trim(), cpf: cpf || null, empresa: empresa || null, localTrabalho: localTrabalho || null },
+      {
+        nome: nome.trim(), cpf: cpf || null, empresa: empresa || null,
+        localTrabalho: localTrabalho || null, tipoSanguineo: tipoSanguineo || null,
+      },
       colaborador?.id || null
     );
     setSalvando(false);
@@ -82,7 +86,7 @@ function FormularioColaborador({
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20"
           />
         </div>
-        <div className="col-span-2">
+        <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">Regime</label>
           <select
             value={localTrabalho}
@@ -92,6 +96,19 @@ function FormularioColaborador({
             <option value="">(não definido)</option>
             <option value="ONSHORE">Onshore</option>
             <option value="OFFSHORE">Offshore</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">Tipo sanguíneo</label>
+          <select
+            value={tipoSanguineo}
+            onChange={(ev) => setTipoSanguineo(ev.target.value)}
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-azul focus:ring-2 focus:ring-azul/20 bg-white"
+          >
+            <option value="">(não definido)</option>
+            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -344,7 +361,10 @@ function ModalHistorico({ colaborador, aoFechar }: { colaborador: Colaborador; a
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="font-bold text-navy text-lg">Histórico — {colaborador.nome}</h2>
-            <p className="text-xs text-gray-500">{colaborador.empresa || "s/ empresa"} — {colaborador.localTrabalho || "s/ local definido"}</p>
+            <p className="text-xs text-gray-500">
+              {colaborador.empresa || "s/ empresa"} — {colaborador.localTrabalho || "s/ local definido"}
+              {colaborador.tipoSanguineo ? ` — Sangue: ${colaborador.tipoSanguineo}` : ""}
+            </p>
           </div>
           <button type="button" onClick={aoFechar} className="text-gray-400 hover:text-gray-600 cursor-pointer">
             <X size={18} />
@@ -365,7 +385,9 @@ function ModalHistorico({ colaborador, aoFechar }: { colaborador: Colaborador; a
                   <p className="text-xs text-gray-500">
                     Emissão: {c.dataEmissao || "-"} · Vencimento: {c.dataVencimento || "-"}
                     {c.numero ? ` · Nº ${c.numero}` : ""}
+                    {c.anoCarteirinha ? ` · Carteirinha ${c.anoCarteirinha}` : ""}
                   </p>
+                  {c.observacao && <p className="text-xs text-gray-400 italic">{c.observacao}</p>}
                 </div>
                 <span
                   className={`text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap ${
@@ -480,6 +502,7 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
               <th className="px-3 py-2 font-semibold">CPF</th>
               <th className="px-3 py-2 font-semibold">Empresa</th>
               <th className="px-3 py-2 font-semibold">Regime</th>
+              <th className="px-3 py-2 font-semibold">Sangue</th>
               <th className="px-3 py-2 font-semibold">Usuário</th>
               <th className="px-3 py-2 font-semibold text-right">Ação</th>
             </tr>
@@ -487,7 +510,7 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
           <tbody className="divide-y divide-gray-100">
             {filtrados.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">Nenhum colaborador encontrado.</td>
+                <td colSpan={7} className="px-3 py-6 text-center text-gray-400">Nenhum colaborador encontrado.</td>
               </tr>
             )}
             {paginados.map((c) => (
@@ -497,6 +520,7 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                   <td className="px-3 py-2 text-gray-600">{c.cpf || "-"}</td>
                   <td className="px-3 py-2 text-gray-600">{c.empresa || "-"}</td>
                   <td className="px-3 py-2 text-gray-600">{c.localTrabalho || "-"}</td>
+                  <td className="px-3 py-2 text-gray-600">{c.tipoSanguineo || "-"}</td>
                   <td className="px-3 py-2">
                     {c.usuarioLogin ? (
                       <span className="inline-flex items-center gap-1 text-xs font-semibold text-azul bg-azul/10 px-2 py-1 rounded-full">
@@ -541,14 +565,14 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                 </tr>
                 {editandoId === c.id && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-3">
+                    <td colSpan={7} className="px-3 py-3">
                       <FormularioColaborador colaborador={c} aoCancelar={() => setEditandoId(null)} aoSalvar={fechar} />
                     </td>
                   </tr>
                 )}
                 {mesclandoId === c.id && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-3">
+                    <td colSpan={7} className="px-3 py-3">
                       <LinhaMesclar
                         colaborador={c}
                         outros={colaboradoresIniciais.filter((o) => o.id !== c.id)}
@@ -560,7 +584,7 @@ export function PainelColaboradores({ colaboradoresIniciais }: { colaboradoresIn
                 )}
                 {vinculandoId === c.id && (
                   <tr>
-                    <td colSpan={6} className="px-3 py-3">
+                    <td colSpan={7} className="px-3 py-3">
                       <LinhaVincular
                         colaborador={c}
                         usuariosDisponiveis={usuarios.filter((u) => u.ativo && !loginsJaVinculados.has(u.usuario))}

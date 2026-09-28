@@ -31,7 +31,16 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
           some no desktop (md:pt-0, onde não existe barra fixa nenhuma)
           e na impressão (a barra já nem aparece, mas o respiro também não
           deve aparecer no papel). */}
-      <div className="flex-1 min-w-0 pt-14 md:pt-0 print:pt-0">{children}</div>
+      <div className="flex-1 min-w-0 pt-14 md:pt-0 print:pt-0 flex flex-col">
+        <div className="flex-1 min-w-0">{children}</div>
+
+        {/* 11/09: aviso de uso monitorado - junto com o rastro de
+            navegação que passou a ser gravado (ver proxy.ts). Fica em
+            toda tela logada, discreto, sem atrapalhar a impressão. */}
+        <p className="print:hidden text-[11px] text-gray-300 text-center px-4 py-3">
+          O uso deste sistema é monitorado (login e navegação).
+        </p>
+      </div>
     </div>
   );
 }

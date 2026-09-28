@@ -21,6 +21,11 @@ import {
   Hash,
   UserPlus,
   Menu,
+  User,
+  Folder,
+  Radar,
+  Workflow,
+  ScanSearch,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -33,6 +38,21 @@ const ITENS_EMBARQUE: ItemMenu[] = [
   { rotulo: "Relatório por empresa", href: "/relatorios", icone: Building2 },
   { rotulo: "Histórico colaborador", href: "/historico-colaborador", icone: Users },
   { rotulo: "Relatório de embarcados", href: "/relatorio-embarcados", icone: Printer },
+];
+
+// "Biblioteca de Documentos" (14/09, renomeada de "Documentos da
+// Plataforma" em 15/09 - pedido do Rafael, achou mais profissional) -
+// biblioteca de arquivos por obra, auto-alimentada (RDOs/Relatório de
+// Embarque) + upload manual (Isométricos/P&ID/Plantas/MD-GM-SS-WO/Outros).
+// Reaproveita a MESMA permissão de "gerenciamento_embarques" por enquanto -
+// decisão do Rafael, ajusta quem vê cada coisa depois. O item separado
+// "Upload de Arquivos" (tela dedicada só pra subir) foi TIRADO da Sidebar
+// em 15/09 (pedido do Rafael: "já tem uma opção pra lançar os arquivos de
+// maneira bem mais fácil" - o próprio card de categoria já tem "Enviar
+// arquivo") - a rota `/documentos-plataforma/upload` continua existindo,
+// só não tem mais entrada na navegação.
+const ITENS_DOCUMENTOS: ItemMenu[] = [
+  { rotulo: "Biblioteca de Documentos", href: "/documentos-plataforma", icone: Folder },
 ];
 
 // resto do sistema (ainda não migrado pro web) - "em breve" virou só uma
@@ -97,7 +117,7 @@ function ModalSobre({ aoFechar }: { aoFechar: () => void }) {
         </button>
         <Image src="/logo-syncerp.png" alt="Sync ERP" width={56} height={56} className="mx-auto mb-3" />
         <p className="font-bold text-navy">{VERSAO_SISTEMA}</p>
-        <p className="text-sm text-gray-500 mt-1">Desenvolvido por Rafael Carneiro</p>
+        <p className="text-sm text-gray-500 mt-1">Developed by Núcleo Sync</p>
         <p className="text-xs text-gray-400 mt-4">Sistema de gerenciamento de embarques offshore — MF Máquinas</p>
       </div>
     </div>
@@ -222,6 +242,23 @@ export function Sidebar({
             <span>Início</span>
           </Link>
 
+          {/* 12/09: atalho pro próprio Painel do Colaborador (/meu-painel),
+              a pedido do Rafael - ele também embarca e quis um jeito de ver
+              suas próprias diárias sem precisar deslogar/logar de novo.
+              Sem checagem de permissão aqui de propósito: quem clicar e não
+              tiver colaborador vinculado só vê a mensagem "ainda não
+              vinculado" (já tratada dentro do painel), não quebra nada. */}
+          <DivisorLateral />
+          <TituloSecao titulo="Pessoal" />
+          <Link
+            href="/meu-painel"
+            className={classeLink(pathname === "/meu-painel")}
+            onClick={() => setMenuAberto(false)}
+          >
+            <User size={18} className="shrink-0" />
+            <span>Meu painel</span>
+          </Link>
+
           {/* 03/09: passou a checar a permissão "gerenciamento_embarques" de
               verdade (antes essa seção aparecia pra QUALQUER usuário com
               acesso ao site, mesmo alguém como a Angélica que só devia ter
@@ -230,6 +267,19 @@ export function Sidebar({
             <>
               <TituloSecao titulo="Gerenciamento de embarque" />
               {ITENS_EMBARQUE.map((item) => {
+                const Icone = item.icone;
+                const ativo = pathname === item.href;
+                return (
+                  <Link key={item.href} href={item.href} className={classeLink(ativo)} onClick={() => setMenuAberto(false)}>
+                    <Icone size={18} className="shrink-0" />
+                    <span>{item.rotulo}</span>
+                  </Link>
+                );
+              })}
+
+              <DivisorLateral />
+              <TituloSecao titulo="Documentos" />
+              {ITENS_DOCUMENTOS.map((item) => {
                 const Icone = item.icone;
                 const ativo = pathname === item.href;
                 return (
@@ -261,6 +311,41 @@ export function Sidebar({
 
           {ehAdmin && (
             <>
+              <DivisorLateral />
+              <TituloSecao titulo="Radar" />
+              <Link
+                href="/radar"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <Radar size={18} className="shrink-0" />
+                <span>Sistema de Atendimentos Internos</span>
+              </Link>
+              <Link
+                href="/radar/fluxo"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar/fluxo" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <Workflow size={18} className="shrink-0" />
+                <span>Fluxo do Sistema</span>
+              </Link>
+              {/* 28/09: terceira peça do Radar - protótipo da validação de
+                  RDO por IA (ver src/app/(app)/radar/rdo-ia/page.tsx) */}
+              <Link
+                href="/radar/rdo-ia"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar/rdo-ia" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <ScanSearch size={18} className="shrink-0" />
+                <span>Revisão de RDOs (IA)</span>
+              </Link>
+
               <DivisorLateral />
               <TituloSecao titulo="Administração" />
               <Link href="/admin" className={classeLink(pathname === "/admin", "vermelho")} onClick={() => setMenuAberto(false)}>
@@ -312,7 +397,7 @@ export function Sidebar({
           <p className="text-center text-[10px] text-gray-500 mt-2">
             {VERSAO_SISTEMA}
             <br />
-            Desenvolvido por Rafael Carneiro
+            Developed by Núcleo Sync
           </p>
         </div>
 

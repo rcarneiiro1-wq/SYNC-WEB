@@ -35,13 +35,21 @@ export async function entrar(formData: FormData) {
   // de acesso web (ou ser admin, que já tem acesso a tudo). Sem essa
   // checagem, todo mundo que já tem conta no desktop entraria no site
   // sem ninguém ter liberado de propósito.
+  //
+  // 11/09: "painel_colaborador" é um acesso web NOVO e separado do
+  // "acesso_web" de sempre - libera só o /meu-painel (ver proxy.ts, que
+  // redireciona quem só tem essa permissão pra lá e barra o resto do
+  // site), nunca o site de gerência inteiro. Pensado pra gente poder
+  // liberar isso pra um colaborador (ex: Gustavo, Eduardo) sem mexer em
+  // nada do acesso de quem já é "acesso_web" de verdade.
   let permissoes: string[] = [];
   try {
     permissoes = JSON.parse(linha.permissoes || "[]");
   } catch {
     permissoes = [];
   }
-  const temAcessoWeb = Boolean(linha.eh_admin) || permissoes.includes("acesso_web");
+  const temAcessoWeb =
+    Boolean(linha.eh_admin) || permissoes.includes("acesso_web") || permissoes.includes("painel_colaborador");
 
   if (!temAcessoWeb) {
     redirect(`/login?erro=sem_permissao&proximo=${encodeURIComponent(proximo)}`);
