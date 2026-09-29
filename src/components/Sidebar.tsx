@@ -26,6 +26,7 @@ import {
   Radar,
   Workflow,
   ScanSearch,
+  IdCard,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -346,6 +347,20 @@ export function Sidebar({
               >
                 <ScanSearch size={18} className="shrink-0" />
                 <span>Revisão de RDOs (IA)</span>
+              </Link>
+              {/* 29/09: quarta peça do Radar - protótipo da Documentação de
+                  Funcionários (ver src/app/(app)/radar/documentos-colaborador/page.tsx) */}
+              <Link
+                href="/radar/documentos-colaborador"
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  pathname === "/radar/documentos-colaborador"
+                    ? "bg-violet-600 text-white"
+                    : "text-gray-300 hover:bg-white/5 hover:text-white"
+                }`}
+                onClick={() => setMenuAberto(false)}
+              >
+                <IdCard size={18} className="shrink-0" />
+                <span>Documentação de Funcionários</span>
               </Link>
             </>
           )}
