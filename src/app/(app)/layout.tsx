@@ -25,6 +25,7 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
         ehAdmin={sessao.ehAdmin}
         temAcessoEmbarques={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("gerenciamento_embarques"))}
         temAcessoCertificados={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("certificados"))}
+        temAcessoRadar={sessao.ehAdmin || Boolean(sessao.permissoes?.includes("radar"))}
       />
       {/* 03/09: pt-14 no celular só pra não ficar embaixo da barra fixa
           (hambúrguer) que a Sidebar passou a desenhar nessa largura -

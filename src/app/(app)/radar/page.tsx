@@ -6,8 +6,10 @@ import { AtendimentosInternosPrototype } from "@/components/radar/AtendimentosIn
 
 /** "Radar" (19/09, a pedido do Rafael) - área reservada pra ideias de
  * projetos futuros, ainda em fase de estudo/protótipo, bem separada do
- * resto do sistema (mesmo esquema de acesso do /admin: só quem tem
- * `eh_admin = true` enxerga essa página e o item na Sidebar).
+ * resto do sistema. Desde 29/09, além de admin, quem tem a permissão
+ * `radar` (ver SISTEMAS_PERMISSAO em lib/usuarios.ts) também enxerga essa
+ * página e o item na Sidebar, sem virar Administrador - pedido do Rafael
+ * pra poder tirar o admin do Geraldo sem tirar o acesso ao Radar.
  *
  * Por enquanto só tem uma aba: "Sistema de Atendimentos Internos" - o
  * protótipo VISUAL do ERP de atendimentos que o Rafael desenhou fora do
@@ -20,7 +22,7 @@ export default async function PaginaRadar() {
   const jar = await cookies();
   const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
 
-  if (!sessao || !sessao.ehAdmin) {
+  if (!sessao || (!sessao.ehAdmin && !sessao.permissoes?.includes("radar"))) {
     redirect("/");
   }
 

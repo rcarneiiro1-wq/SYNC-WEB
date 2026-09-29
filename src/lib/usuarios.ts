@@ -27,6 +27,12 @@ export const SISTEMAS_PERMISSAO = [
     rotulo: "Acesso ao site (web) - painel de acompanhamento",
     descricao: "Libera acesso ao painel web de acompanhamento",
   },
+  {
+    chave: "radar",
+    rotulo: "Radar (novidades e protótipos)",
+    descricao:
+      "Permite ver a área Radar (ideias e protótipos em teste), sem dar o resto do acesso de Administrador - lembrar de marcar também \"Acesso ao site\" acima",
+  },
 ] as const;
 
 export type UsuarioCompleto = {

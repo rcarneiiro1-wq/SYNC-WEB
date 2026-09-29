@@ -5,15 +5,16 @@ import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { FluxoSistema } from "@/components/radar/FluxoSistema";
 
 /** "Fluxo do Sistema" (19/09, a pedido do Rafael) - segunda peça do
- * protótipo do Radar, mesmo esquema de acesso de /radar (só admin).
- * Conta em 2 passos a jornada completa de um atendimento de exemplo,
- * do momento em que é aberto até o parecer final pro cliente. Igual ao
- * resto do Radar: puro protótipo visual, nada aqui grava no banco. */
+ * protótipo do Radar, mesmo esquema de acesso de /radar (admin OU
+ * permissão `radar`, ver nota em radar/page.tsx). Conta em 2 passos a
+ * jornada completa de um atendimento de exemplo, do momento em que é
+ * aberto até o parecer final pro cliente. Igual ao resto do Radar: puro
+ * protótipo visual, nada aqui grava no banco. */
 export default async function PaginaFluxoSistema() {
   const jar = await cookies();
   const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
 
-  if (!sessao || !sessao.ehAdmin) {
+  if (!sessao || (!sessao.ehAdmin && !sessao.permissoes?.includes("radar"))) {
     redirect("/");
   }
 

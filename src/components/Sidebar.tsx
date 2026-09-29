@@ -25,7 +25,6 @@ import {
   Folder,
   Radar,
   Workflow,
-  ScanSearch,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -131,6 +130,7 @@ export function Sidebar({
   ehAdmin,
   temAcessoEmbarques,
   temAcessoCertificados,
+  temAcessoRadar,
 }: {
   nome: string;
   funcao?: string;
@@ -138,6 +138,7 @@ export function Sidebar({
   ehAdmin?: boolean;
   temAcessoEmbarques?: boolean;
   temAcessoCertificados?: boolean;
+  temAcessoRadar?: boolean;
 }) {
   const pathname = usePathname();
   const [sobreAberto, setSobreAberto] = useState(false);
@@ -309,7 +310,7 @@ export function Sidebar({
             </>
           )}
 
-          {ehAdmin && (
+          {(ehAdmin || temAcessoRadar) && (
             <>
               <DivisorLateral />
               <TituloSecao titulo="Radar" />
@@ -333,19 +334,11 @@ export function Sidebar({
                 <Workflow size={18} className="shrink-0" />
                 <span>Fluxo do Sistema</span>
               </Link>
-              {/* 28/09: terceira peça do Radar - protótipo da validação de
-                  RDO por IA (ver src/app/(app)/radar/rdo-ia/page.tsx) */}
-              <Link
-                href="/radar/rdo-ia"
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  pathname === "/radar/rdo-ia" ? "bg-violet-600 text-white" : "text-gray-300 hover:bg-white/5 hover:text-white"
-                }`}
-                onClick={() => setMenuAberto(false)}
-              >
-                <ScanSearch size={18} className="shrink-0" />
-                <span>Revisão de RDOs (IA)</span>
-              </Link>
+            </>
+          )}
 
+          {ehAdmin && (
+            <>
               <DivisorLateral />
               <TituloSecao titulo="Administração" />
               <Link href="/admin" className={classeLink(pathname === "/admin", "vermelho")} onClick={() => setMenuAberto(false)}>
