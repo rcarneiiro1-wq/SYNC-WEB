@@ -5,8 +5,9 @@ import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { RevisaoRdoIaPrototype } from "@/components/radar/RevisaoRdoIaPrototype";
 
 /** "Revisão de RDOs (IA)" (28/09, a pedido do Rafael) - terceira peça do
- * Radar, mesmo esquema de acesso das outras duas (só quem tem
- * `eh_admin = true` enxerga essa página e o item na Sidebar).
+ * Radar, mesmo esquema de acesso das outras duas: admin OU quem tem a
+ * permissão `radar` (ver SISTEMAS_PERMISSAO em lib/usuarios.ts, criada em
+ * 29/09 pra dar acesso ao Radar sem precisar virar Administrador).
  *
  * Ideia: uma IA leria o texto livre da `descricao` de cada RDO (não as
  * caixinhas de SIM/N/A, pouco confiáveis) pra sinalizar se existe uma
@@ -22,7 +23,7 @@ export default async function PaginaRevisaoRdoIa() {
   const jar = await cookies();
   const sessao = await validarCookieSessao(jar.get(NOME_COOKIE_USUARIO)?.value);
 
-  if (!sessao || !sessao.ehAdmin) {
+  if (!sessao || (!sessao.ehAdmin && !sessao.permissoes?.includes("radar"))) {
     redirect("/");
   }
 
