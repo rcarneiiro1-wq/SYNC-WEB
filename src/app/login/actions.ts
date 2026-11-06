@@ -69,7 +69,12 @@ export async function entrar(formData: FormData) {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30, // 30 dias - não precisa logar de novo toda hora
+    // 06/11: TIRADO de propósito o maxAge de 30 dias (pedido do Rafael) -
+    // sem maxAge/expires isso vira um cookie DE SESSÃO: fecha o navegador
+    // (ou reinicia o computador), a sessão acaba e a próxima visita pede
+    // login de novo. É isso que garante que uma permissão nova (ex: dar
+    // acesso ao Radar pra alguém) só demora até a pessoa fechar e abrir
+    // o navegador de novo - não até 30 dias depois, como era antes.
     path: "/",
   });
 
