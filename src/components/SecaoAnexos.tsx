@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { AnexoEmbarque } from "@/lib/embarques";
 import { tempoRelativo } from "@/lib/tempo";
 import { urlDownloadArquivo } from "@/lib/download";
-import { subirAnexoEmbarque, removerAnexoEmbarque, type TipoAnexo } from "@/lib/anexosActions";
+import { subirAnexoEmbarque, removerAnexoEmbarque } from "@/lib/anexosActions";
+import type { TipoAnexo } from "@/lib/anexosTipos";
 
 const ROTULOS_TIPO: Record<TipoAnexo, string> = {
   rdo: "RDO",

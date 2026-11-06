@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 import { criarClienteAdmin } from "@/lib/supabase-admin";
+import { TIPOS_ANEXO, type TipoAnexo } from "@/lib/anexosTipos";
 
 // Mesmo bucket e mesmo padrão de caminho que o desktop usa (modulos/rdo/
 // sync.py, função `enviar_anexo_embarque`) - tem que ser IGUAL pros dois
@@ -33,9 +34,6 @@ function gerarIdAnexo(): string {
   const sufixo = Math.floor(100 + Math.random() * 900).toString();
   return `${agora}${sufixo}`;
 }
-
-export const TIPOS_ANEXO = ["rdo", "relatorio_embarque"] as const;
-export type TipoAnexo = (typeof TIPOS_ANEXO)[number];
 
 /** Sobe um anexo manual (RDO escaneado ou Relatório de Embarque, assinado
  * ou não) pro Storage do Supabase e registra a linha em `anexos_embarque`
