@@ -2,7 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { uploadDocumentoPlataforma } from "@/lib/documentosPlataformaActions";
+import {
+  prepararUploadDocumentoPlataforma,
+  confirmarUploadDocumentoPlataforma,
+} from "@/lib/documentosPlataformaActions";
+import { clienteNavegador } from "@/lib/supabase-browser";
 import type { CategoriaDocumento } from "@/lib/documentosPlataformaTipos";
 
 /** Botão "➕ Enviar arquivo" reutilizado nos dois lugares combinados com o
@@ -22,13 +26,38 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
     // try/catch/finally - mesmo motivo já documentado em SecaoAnexos.tsx
     // (14/09): sem isso, uma queda de conexão no meio do envio trava o
     // botão em "Enviando..." pro resto da sessão, sem nenhum erro visível.
+    //
+    // 12/11: upload em DUAS etapas (ver documentosPlataformaActions.ts) -
+    // o arquivo em si nunca passa pela Server Action (seria barrado pelo
+    // limite de 4.5MB da própria Vercel, que é bem menor que os 50MB que a
+    // tela promete); ele vai DIRETO pro Supabase Storage usando um link
+    // assinado, e só o metadado (nome/tamanho/categoria) passa pela action.
     try {
       for (const arquivo of Array.from(arquivos)) {
-        const formData = new FormData();
-        formData.set("obraId", obraId);
-        formData.set("categoria", categoria);
-        formData.set("arquivo", arquivo);
-        const resultado = await uploadDocumentoPlataforma(formData);
+        const preparo = await prepararUploadDocumentoPlataforma(obraId, categoria, arquivo.name, arquivo.size);
+        if (!preparo.sucesso) {
+          setErro(preparo.erro);
+          break;
+        }
+
+        const { error: erroUpload } = await clienteNavegador()
+          .storage.from("documentos-plataforma")
+          .uploadToSignedUrl(preparo.caminhoNoBucket, preparo.token, arquivo, {
+            contentType: preparo.contentType,
+          });
+        if (erroUpload) {
+          setErro(`Não consegui subir o arquivo: ${erroUpload.message}`);
+          break;
+        }
+
+        const resultado = await confirmarUploadDocumentoPlataforma({
+          documentoId: preparo.documentoId,
+          grupoKey: obraId,
+          categoria,
+          caminhoNoBucket: preparo.caminhoNoBucket,
+          nomeArquivo: arquivo.name,
+          tamanhoBytes: arquivo.size,
+        });
         if (!resultado.sucesso) {
           setErro(resultado.erro);
           break;

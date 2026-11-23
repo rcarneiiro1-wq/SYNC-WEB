@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import type { AnexoEmbarque } from "@/lib/embarques";
 import { tempoRelativo } from "@/lib/tempo";
 import { urlDownloadArquivo } from "@/lib/download";
-import { subirAnexoEmbarque, removerAnexoEmbarque } from "@/lib/anexosActions";
+import { prepararUploadAnexoEmbarque, confirmarUploadAnexoEmbarque, removerAnexoEmbarque } from "@/lib/anexosActions";
+import { clienteNavegador } from "@/lib/supabase-browser";
 import type { TipoAnexo } from "@/lib/anexosTipos";
 
 const ROTULOS_TIPO: Record<TipoAnexo, string> = {
@@ -122,14 +123,37 @@ export function SecaoAnexos({ embarqueId, anexos }: { embarqueId: string; anexos
     // setProcessando(false) logo abaixo nunca era alcançado (achado em
     // 14/09, investigando por que "Remover" parecia não fazer mais nada
     // depois de uma falha anterior na mesma tela).
+    // 12/11: upload em duas etapas (ver anexosActions.ts) - o arquivo
+    // nunca passa pela Server Action (acima de uns 4MB seria barrado pelo
+    // limite de 4.5MB da própria Vercel, bem abaixo do que essa tela
+    // promete aceitar); ele vai DIRETO pro Supabase Storage via link
+    // assinado, e só o metadado passa pela action.
     try {
       for (const arquivo of Array.from(arquivos)) {
-        const formData = new FormData();
-        formData.set("embarqueId", embarqueId);
-        formData.set("arquivo", arquivo);
-        formData.set("tipo", tipoEscolhido);
-        formData.set("assinado", assinadoEscolhido ? "true" : "false");
-        const resultado = await subirAnexoEmbarque(formData);
+        const preparo = await prepararUploadAnexoEmbarque(embarqueId, arquivo.name, arquivo.size, assinadoEscolhido);
+        if (!preparo.sucesso) {
+          setErro(preparo.erro);
+          break;
+        }
+
+        const { error: erroUpload } = await clienteNavegador()
+          .storage.from("relatorios-assinados")
+          .uploadToSignedUrl(preparo.caminhoNoBucket, preparo.token, arquivo, {
+            contentType: preparo.contentType,
+          });
+        if (erroUpload) {
+          setErro(`Não consegui subir o arquivo: ${erroUpload.message}`);
+          break;
+        }
+
+        const resultado = await confirmarUploadAnexoEmbarque({
+          embarqueId,
+          anexoId: preparo.anexoId,
+          caminhoNoBucket: preparo.caminhoNoBucket,
+          nomeArquivo: arquivo.name,
+          tipo: tipoEscolhido,
+          assinado: assinadoEscolhido,
+        });
         if (!resultado.sucesso) {
           setErro(resultado.erro);
           break;

@@ -14,6 +14,10 @@ const TAMANHO_MAXIMO_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export type ResultadoAnexo = { sucesso: true } | { sucesso: false; erro: string };
 
+export type ResultadoPrepararUploadAnexo =
+  | { sucesso: true; signedUrl: string; token: string; caminhoNoBucket: string; anexoId: string; contentType: string }
+  | { sucesso: false; erro: string };
+
 /** Confere se tem uma sessão válida (mesmo login usado no resto do site) -
  * a página em si já fica atrás do login (proxy.ts), mas uma Server Action
  * pode em teoria ser chamada direto, então confere de novo aqui. */
@@ -49,37 +53,40 @@ function gerarIdAnexo(): string {
  * Andréia); quando não, fica junto com os demais anexos gerais em "Anexos
  * do Embarque". Isso NUNCA se aplica ao PDF de RDO que sobe sozinho depois
  * de gerado (outro mecanismo, veja `enviarPdfRdo`) - só ao upload manual. */
-export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoAnexo> {
+/** PASSO 1 de 2 - 12/11: substituiu o jeito antigo de mandar o arquivo
+ * inteiro dentro da Server Action. Mesma causa raiz documentada em
+ * `documentosPlataformaActions.ts`: toda Server Action é uma Vercel
+ * Function, travada em 4.5MB de corpo de requisição (erro 413) - bem
+ * abaixo dos 20MB que essa tela já prometia aceitar. Aqui só manda
+ * metadado (embarqueId/tipo/assinado/nome/tamanho do arquivo) - cabe
+ * tranquilo - e devolve um link assinado do Storage. O navegador sobe o
+ * arquivo DIRETO pra esse link (ver `src/lib/supabase-browser.ts`), sem
+ * passar pela function; `confirmarUploadAnexoEmbarque` (abaixo) registra
+ * o anexo na tabela depois que o upload direto já deu certo. */
+export async function prepararUploadAnexoEmbarque(
+  embarqueId: string,
+  nomeArquivoBruto: string,
+  tamanhoBytes: number,
+  assinado: boolean
+): Promise<ResultadoPrepararUploadAnexo> {
   const nomeUsuario = await usuarioLogado();
   if (!nomeUsuario) {
     return { sucesso: false, erro: "Sessão expirada - atualiza a página e faz login de novo." };
   }
 
-  const embarqueId = formData.get("embarqueId");
-  const arquivo = formData.get("arquivo");
-  const tipoBruto = formData.get("tipo");
-  const assinadoBruto = formData.get("assinado");
-
-  if (typeof embarqueId !== "string" || !embarqueId) {
+  if (!embarqueId) {
     return { sucesso: false, erro: "Embarque não identificado." };
   }
-  if (!(arquivo instanceof File) || arquivo.size === 0) {
+  if (!nomeArquivoBruto || !tamanhoBytes || tamanhoBytes <= 0) {
     return { sucesso: false, erro: "Nenhum arquivo selecionado." };
   }
-  if (arquivo.size > TAMANHO_MAXIMO_BYTES) {
+  if (tamanhoBytes > TAMANHO_MAXIMO_BYTES) {
     return { sucesso: false, erro: `Arquivo muito grande (máximo ${TAMANHO_MAXIMO_BYTES / 1024 / 1024}MB).` };
   }
-
-  const extensao = (arquivo.name.split(".").pop() || "").toLowerCase();
+  const extensao = (nomeArquivoBruto.split(".").pop() || "").toLowerCase();
   if (!EXTENSOES_PERMITIDAS.includes(extensao)) {
     return { sucesso: false, erro: "Tipo de arquivo não permitido - usa PDF, JPG, PNG ou HEIC." };
   }
-
-  const tipo: TipoAnexo | null =
-    typeof tipoBruto === "string" && (TIPOS_ANEXO as readonly string[]).includes(tipoBruto)
-      ? (tipoBruto as TipoAnexo)
-      : null;
-  const assinado = assinadoBruto === "true" || assinadoBruto === "on";
 
   const anexoId = gerarIdAnexo();
   const contentType = extensao === "pdf" ? "application/pdf" : `image/${extensao === "jpg" ? "jpeg" : extensao}`;
@@ -87,28 +94,50 @@ export async function subirAnexoEmbarque(formData: FormData): Promise<ResultadoA
   const caminhoNoBucket = `${pasta}/anexo_${anexoId}.${extensao}`;
 
   const admin = criarClienteAdmin();
-  const bytes = await arquivo.arrayBuffer();
-
-  const { error: erroUpload } = await admin.storage
+  const { data, error } = await admin.storage
     .from(NOME_BUCKET_ANEXOS)
-    .upload(caminhoNoBucket, bytes, { contentType, upsert: true });
-  if (erroUpload) {
-    return { sucesso: false, erro: `Não consegui subir o arquivo: ${erroUpload.message}` };
+    .createSignedUploadUrl(caminhoNoBucket, { upsert: true });
+  if (error || !data) {
+    return { sucesso: false, erro: `Não consegui preparar o upload: ${error?.message ?? "erro desconhecido"}` };
   }
 
-  const { data: urlPublica } = admin.storage.from(NOME_BUCKET_ANEXOS).getPublicUrl(caminhoNoBucket);
+  return { sucesso: true, signedUrl: data.signedUrl, token: data.token, caminhoNoBucket, anexoId, contentType };
+}
+
+/** PASSO 2 de 2 - chamado pelo navegador depois do upload direto pro
+ * Storage ter dado certo. Igual ao fluxo antigo: registra a linha em
+ * `anexos_embarque` com a URL pública do arquivo que acabou de subir. */
+export async function confirmarUploadAnexoEmbarque(dados: {
+  embarqueId: string;
+  anexoId: string;
+  caminhoNoBucket: string;
+  nomeArquivo: string;
+  tipo: string;
+  assinado: boolean;
+}): Promise<ResultadoAnexo> {
+  const nomeUsuario = await usuarioLogado();
+  if (!nomeUsuario) {
+    return { sucesso: false, erro: "Sessão expirada - atualiza a página e faz login de novo." };
+  }
+
+  const tipo: TipoAnexo | null = (TIPOS_ANEXO as readonly string[]).includes(dados.tipo)
+    ? (dados.tipo as TipoAnexo)
+    : null;
+
+  const admin = criarClienteAdmin();
+  const { data: urlPublica } = admin.storage.from(NOME_BUCKET_ANEXOS).getPublicUrl(dados.caminhoNoBucket);
 
   // guarda o NOME ORIGINAL do arquivo (o que a pessoa deu ao selecionar) -
   // é esse nome que precisa vir de volta quando alguém baixar depois,
   // não o nome interno do bucket (embarque_.../anexo_....ext)
   const { error: erroInsert } = await admin.from("anexos_embarque").insert({
-    id: anexoId,
-    embarque_id: embarqueId,
-    nome_arquivo: arquivo.name,
+    id: dados.anexoId,
+    embarque_id: dados.embarqueId,
+    nome_arquivo: dados.nomeArquivo,
     url_nuvem: urlPublica.publicUrl,
     enviado_por: nomeUsuario,
     tipo,
-    assinado,
+    assinado: dados.assinado,
   });
   if (erroInsert) {
     return { sucesso: false, erro: `O arquivo subiu, mas não consegui registrar: ${erroInsert.message}` };

@@ -15,6 +15,10 @@ const TAMANHO_MAXIMO_BYTES = 50 * 1024 * 1024;
 
 export type ResultadoDocumento = { sucesso: true } | { sucesso: false; erro: string };
 
+export type ResultadoPrepararUpload =
+  | { sucesso: true; signedUrl: string; token: string; caminhoNoBucket: string; documentoId: string; contentType: string }
+  | { sucesso: false; erro: string };
+
 /** Confere sessão E permissão - "Documentos da Plataforma"/"Upload de
  * Arquivos" reaproveita a MESMA permissão de "gerenciamento_embarques" já
  * existente (decisão do Rafael, 14/09: não criar uma permissão nova agora,
@@ -34,48 +38,59 @@ function gerarIdDocumento(): string {
   return `${agora}${sufixo}`;
 }
 
-/** Sobe um documento GERAL (Isométricos/P&ID/Plantas/Outros) de uma
- * plataforma - upload manual, só gerência por enquanto (ver nota acima).
- * Diferente dos anexos de embarque (RDO/Relatório), aqui NUNCA substitui um
- * arquivo existente - cada envio é um documento novo na biblioteca. */
-export async function uploadDocumentoPlataforma(formData: FormData): Promise<ResultadoDocumento> {
+/** PASSO 1 de 2 do upload de documento GERAL (Isométricos/P&ID/Plantas/
+ * MD-GM-SS-WO/Outros) - 12/11: substituiu o `uploadDocumentoPlataforma`
+ * antigo (que recebia o arquivo inteiro aqui dentro). Causa raiz do "upload
+ * sempre falha" que o Rafael reportou (os PDFs de MD/GM escaneados, mas
+ * valeria pra qualquer arquivo real acima de uns 4MB): toda Server Action
+ * roda como uma Vercel Function, e a Vercel trava QUALQUER corpo de
+ * requisição em 4.5MB (erro 413) - isso acontece ANTES do nosso próprio
+ * limite de 50MB sequer ser conferido, então nunca dava pra saber pelo
+ * erro. Essa função aqui NÃO recebe mais o arquivo - só os metadados (nome/
+ * tamanho/categoria/plataforma), que cabem tranquilo no limite da Vercel -
+ * e devolve um link assinado do Supabase Storage. O navegador sobe o
+ * arquivo DIRETO pra esse link (`uploadToSignedUrl`, ver
+ * `src/lib/supabase-browser.ts`), sem passar pela function. Depois do
+ * upload direto, `confirmarUploadDocumentoPlataforma` (abaixo) registra o
+ * documento na tabela - mesma lógica de antes, só que em duas etapas. */
+export async function prepararUploadDocumentoPlataforma(
+  grupoKeyBruto: string,
+  categoriaBruta: string,
+  nomeArquivoBruto: string,
+  tamanhoBytes: number
+): Promise<ResultadoPrepararUpload> {
   const nomeUsuario = await usuarioComPermissao();
   if (!nomeUsuario) {
     return { sucesso: false, erro: "Você não tem acesso a essa área, ou sua sessão expirou." };
   }
 
-  // 14/09: o que chega do formulário aqui é o GRUPO da plataforma (código
-  // normalizado - ver `chaveDeGrupo` em documentosPlataforma.ts), não mais
-  // 1 `obras.id` direto - pode representar mais de uma obra cadastrada de
-  // verdade (cadastro duplicado da mesma plataforma física). Resolve pro
-  // id real ANTES de gravar, já que `documentos_plataforma.obra_id` é
-  // bigint de verdade, referenciando 1 obra só.
-  const grupoKey = formData.get("obraId");
-  const categoriaBruta = formData.get("categoria");
-  const arquivo = formData.get("arquivo");
-
-  if (typeof grupoKey !== "string" || !grupoKey) {
+  // 14/09: o que chega aqui é o GRUPO da plataforma (código normalizado -
+  // ver `chaveDeGrupo` em documentosPlataforma.ts), não mais 1 `obras.id`
+  // direto - pode representar mais de uma obra cadastrada de verdade
+  // (cadastro duplicado da mesma plataforma física). Resolve pro id real
+  // ANTES de gravar, já que `documentos_plataforma.obra_id` é bigint de
+  // verdade, referenciando 1 obra só.
+  if (!grupoKeyBruto) {
     return { sucesso: false, erro: "Plataforma não identificada." };
   }
-  const grupo = await resolverGrupoPlataforma(grupoKey);
+  const grupo = await resolverGrupoPlataforma(grupoKeyBruto);
   if (!grupo) {
     return { sucesso: false, erro: "Não achei essa plataforma no cadastro." };
   }
   const obraId = obraIdCanonicoDoGrupo(grupo.obraIds);
-  const categoria: CategoriaDocumento | null =
-    typeof categoriaBruta === "string" && (CATEGORIAS_DOCUMENTO as readonly string[]).includes(categoriaBruta)
-      ? (categoriaBruta as CategoriaDocumento)
-      : null;
+  const categoria: CategoriaDocumento | null = (CATEGORIAS_DOCUMENTO as readonly string[]).includes(categoriaBruta)
+    ? (categoriaBruta as CategoriaDocumento)
+    : null;
   if (!categoria) {
     return { sucesso: false, erro: "Categoria inválida." };
   }
-  if (!(arquivo instanceof File) || arquivo.size === 0) {
+  if (!nomeArquivoBruto || !tamanhoBytes || tamanhoBytes <= 0) {
     return { sucesso: false, erro: "Nenhum arquivo selecionado." };
   }
-  if (arquivo.size > TAMANHO_MAXIMO_BYTES) {
+  if (tamanhoBytes > TAMANHO_MAXIMO_BYTES) {
     return { sucesso: false, erro: `Arquivo muito grande (máximo ${TAMANHO_MAXIMO_BYTES / 1024 / 1024}MB).` };
   }
-  const extensao = (arquivo.name.split(".").pop() || "").toLowerCase();
+  const extensao = (nomeArquivoBruto.split(".").pop() || "").toLowerCase();
   if (!EXTENSOES_PERMITIDAS.includes(extensao)) {
     return { sucesso: false, erro: "Tipo de arquivo não permitido - usa PDF, JPG, PNG ou HEIC." };
   }
@@ -85,29 +100,59 @@ export async function uploadDocumentoPlataforma(formData: FormData): Promise<Res
   const caminhoNoBucket = `obra_${obraId}/${categoria}/${documentoId}.${extensao}`;
 
   const admin = criarClienteAdmin();
-  const bytes = await arquivo.arrayBuffer();
-
-  const { error: erroUpload } = await admin.storage
-    .from(NOME_BUCKET_DOCUMENTOS)
-    .upload(caminhoNoBucket, bytes, { contentType, upsert: false });
-  if (erroUpload) {
-    return { sucesso: false, erro: `Não consegui subir o arquivo: ${erroUpload.message}` };
+  const { data, error } = await admin.storage.from(NOME_BUCKET_DOCUMENTOS).createSignedUploadUrl(caminhoNoBucket);
+  if (error || !data) {
+    return { sucesso: false, erro: `Não consegui preparar o upload: ${error?.message ?? "erro desconhecido"}` };
   }
 
+  return { sucesso: true, signedUrl: data.signedUrl, token: data.token, caminhoNoBucket, documentoId, contentType };
+}
+
+/** PASSO 2 de 2 - chamado pelo navegador DEPOIS do upload direto pro
+ * Storage ter dado certo (ver `prepararUploadDocumentoPlataforma` acima).
+ * Confere sessão/permissão de novo (nunca confia só no que rolou no
+ * navegador) e registra a linha em `documentos_plataforma` - mesma lógica
+ * de limpeza de órfão que já existia antes, caso o INSERT falhe. */
+export async function confirmarUploadDocumentoPlataforma(dados: {
+  documentoId: string;
+  grupoKey: string;
+  categoria: string;
+  caminhoNoBucket: string;
+  nomeArquivo: string;
+  tamanhoBytes: number;
+}): Promise<ResultadoDocumento> {
+  const nomeUsuario = await usuarioComPermissao();
+  if (!nomeUsuario) {
+    return { sucesso: false, erro: "Você não tem acesso a essa área, ou sua sessão expirou." };
+  }
+
+  const grupo = await resolverGrupoPlataforma(dados.grupoKey);
+  if (!grupo) {
+    return { sucesso: false, erro: "Não achei essa plataforma no cadastro." };
+  }
+  const obraId = obraIdCanonicoDoGrupo(grupo.obraIds);
+  const categoria: CategoriaDocumento | null = (CATEGORIAS_DOCUMENTO as readonly string[]).includes(dados.categoria)
+    ? (dados.categoria as CategoriaDocumento)
+    : null;
+  if (!categoria) {
+    return { sucesso: false, erro: "Categoria inválida." };
+  }
+
+  const admin = criarClienteAdmin();
   const { error: erroInsert } = await admin.from("documentos_plataforma").insert({
-    id: documentoId,
+    id: dados.documentoId,
     obra_id: obraId,
     categoria,
-    nome_arquivo: arquivo.name,
-    caminho_storage: caminhoNoBucket,
-    tamanho_bytes: arquivo.size,
+    nome_arquivo: dados.nomeArquivo,
+    caminho_storage: dados.caminhoNoBucket,
+    tamanho_bytes: dados.tamanhoBytes,
     enviado_por: nomeUsuario,
   });
   if (erroInsert) {
     // melhor esforço: se o registro falhar, remove o arquivo órfão do
     // Storage também, pra não repetir o mesmo tipo de vazamento silencioso
     // já achado e corrigido nos anexos de embarque (ver "sétima entrega")
-    await admin.storage.from(NOME_BUCKET_DOCUMENTOS).remove([caminhoNoBucket]);
+    await admin.storage.from(NOME_BUCKET_DOCUMENTOS).remove([dados.caminhoNoBucket]);
     return { sucesso: false, erro: `Não consegui registrar o documento: ${erroInsert.message}` };
   }
 
