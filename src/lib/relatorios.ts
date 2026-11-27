@@ -130,6 +130,11 @@ export type LinhaRelatorioEmpresa = {
   numeroEmbarques: number;
   totalDiarias: number;
   colaboradoresDistintos: number;
+  // 27/11: as CHAVES dos colaboradores (não só a contagem) - pra dar pra
+  // somar/deduplicar entre empresas na "Visão geral" (ex: "3 colaboradores
+  // distintos" somando Infotec + Hydra sem contar a mesma pessoa 2x, caso
+  // ela apareça em mais de uma empresa no período).
+  colaboradoresIds: string[];
   percentualMedio: number | null;
   completos: number; // embarques finalizados com status_final = "completo"
   comPendencia: number; // embarques finalizados com status_final = "com_pendencia"
@@ -292,6 +297,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
       numeroEmbarques: acc.numeroEmbarques,
       totalDiarias: acc.totalDiarias,
       colaboradoresDistintos: acc.colaboradores.size,
+      colaboradoresIds: Array.from(acc.colaboradores),
       percentualMedio: acc.percentuais.length > 0
         ? Math.round(acc.percentuais.reduce((s, p) => s + p, 0) / acc.percentuais.length)
         : null,
@@ -302,4 +308,187 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
       embarques: acc.embarques.sort((a, b) => b.diariasNoRecorte - a.diariasNoRecorte),
     }))
     .sort((a, b) => b.totalDiarias - a.totalDiarias);
+}
+
+const NOMES_MESES_CURTO = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+export type PontoEvolucaoMensal = {
+  mes: string; // "AAAA-MM"
+  rotulo: string; // "Ago/26"
+  porEmpresa: Record<string, { diarias: number; embarques: number }>;
+};
+
+/** Evolução mês a mês (diárias e embarques iniciados) por empresa, dentro
+ * do período pedido - alimenta o gráfico de barras da "Visão geral"
+ * (27/11, a pedido do Rafael depois de comparar com outro mockup).
+ *
+ * Reaproveita as MESMAS contas de `buscarRelatorioPorEmpresa`
+ * (`intervaloRealDoEmbarque` + `diasSobrepostos`), só que fatiadas em
+ * meses de calendário em vez de um período só - por isso busca os
+ * embarques de novo em vez de reaproveitar o resultado dela, que já vem
+ * agregado pro período inteiro (não dá pra "desagregar" de volta em
+ * meses a partir dos totais já somados). */
+export async function buscarEvolucaoMensal(periodo: Periodo): Promise<PontoEvolucaoMensal[]> {
+  const COLUNAS_EMBARQUES = "id::text, obra_id::text, data_inicio, data_fim, ativo, status_final";
+  const COLUNAS_OBRAS = "id::text, nome, empresa";
+  const COLUNAS_RDOS = "id::text, embarque_id::text, numero_rdo, data";
+
+  const { data: embarquesRaw, error: erroEmb } = await supabase
+    .from("embarques")
+    .select(COLUNAS_EMBARQUES)
+    .lte("data_inicio", periodo.fim)
+    .or(`data_fim.gte.${periodo.inicio},data_fim.is.null`);
+  if (erroEmb) throw new Error(`Não consegui buscar os embarques: ${erroEmb.message}`);
+  if (!embarquesRaw || embarquesRaw.length === 0) return [];
+  const embarques = embarquesRaw as unknown as Embarque[];
+
+  const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
+  const idsEmbarques = embarques.map((e) => e.id);
+  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }] = await Promise.all([
+    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+    supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques),
+  ]);
+  if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
+  if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  const obras = obrasRaw as unknown as Obra[];
+  const rdos = rdosRaw as unknown as Rdo[];
+
+  const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
+  for (const rdo of rdos || []) {
+    const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
+    lista.push(rdo);
+    rdosPorEmbarque.set(rdo.embarque_id, lista);
+  }
+
+  const intervalos = embarques
+    .map((embarque) => {
+      const obra = obrasPorId.get(embarque.obra_id);
+      const empresa = (obra?.empresa || "sem empresa").trim();
+      const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
+      const { inicio, fim } = intervaloRealDoEmbarque(embarque, listaRdos);
+      return { empresa, inicio, fim };
+    })
+    .filter((x): x is { empresa: string; inicio: string; fim: string } => Boolean(x.inicio));
+
+  const [anoIni, mesIni] = periodo.inicio.slice(0, 7).split("-").map(Number);
+  const [anoFim, mesFim] = periodo.fim.slice(0, 7).split("-").map(Number);
+  const pontos: PontoEvolucaoMensal[] = [];
+  let ano = anoIni;
+  let mes = mesIni;
+  while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+    const mesPeriodo = periodoMesCalendario(ano, mes);
+    const porEmpresa: Record<string, { diarias: number; embarques: number }> = {};
+    for (const it of intervalos) {
+      const diarias = diasSobrepostos(it.inicio, it.fim, mesPeriodo.inicio, mesPeriodo.fim);
+      if (diarias === 0) continue;
+      if (!porEmpresa[it.empresa]) porEmpresa[it.empresa] = { diarias: 0, embarques: 0 };
+      porEmpresa[it.empresa].diarias += diarias;
+      if (it.inicio >= mesPeriodo.inicio && it.inicio <= mesPeriodo.fim) porEmpresa[it.empresa].embarques += 1;
+    }
+    pontos.push({
+      mes: `${ano}-${String(mes).padStart(2, "0")}`,
+      rotulo: `${NOMES_MESES_CURTO[mes - 1]}/${String(ano).slice(2)}`,
+      porEmpresa,
+    });
+    mes += 1;
+    if (mes > 12) { mes = 1; ano += 1; }
+  }
+  return pontos;
+}
+
+export type Insight = {
+  tipo: "up" | "info" | "alerta";
+  icone: string;
+  titulo: string;
+  descricao: string;
+};
+
+function capitalizar(nome: string): string {
+  return nome.length > 0 ? nome.charAt(0).toUpperCase() + nome.slice(1) : nome;
+}
+
+/** Gera os "Principais insights" da Visão geral por regra simples em cima
+ * dos números já calculados - SEM IA, sem chamada externa, só texto
+ * condicional (27/11, ideia trazida pelo Rafael depois de ver outro
+ * mockup - mais barato e mais rápido que gerar isso com um modelo a cada
+ * carregamento de página, e sempre reproduz o mesmo resultado pro mesmo
+ * dado). Recorta sozinho pra 1 empresa selecionada ou várias. */
+export function gerarInsights(linhas: LinhaRelatorioEmpresa[], evolucao: PontoEvolucaoMensal[]): Insight[] {
+  const insights: Insight[] = [];
+  if (linhas.length === 0) return insights;
+
+  const totalDiarias = linhas.reduce((s, l) => s + l.totalDiarias, 0);
+  const totalEmbarques = linhas.reduce((s, l) => s + l.numeroEmbarques, 0);
+
+  // 1) crescimento: embarques por mês subindo (ou se mantendo) em toda a
+  // série relevante, com pelo menos 3 meses de histórico pra valer a pena
+  for (const linha of linhas) {
+    const serie = evolucao.map((p) => p.porEmpresa[linha.empresa]?.embarques ?? 0);
+    const primeiraOcorrencia = serie.findIndex((v) => v > 0);
+    const serieRelevante = primeiraOcorrencia >= 0 ? serie.slice(primeiraOcorrencia) : [];
+    if (serieRelevante.length >= 3) {
+      const nuncaCai = serieRelevante.every((v, i) => i === 0 || v >= serieRelevante[i - 1]);
+      const cresceuDeVerdade = serieRelevante[serieRelevante.length - 1] > serieRelevante[0];
+      if (nuncaCai && cresceuDeVerdade) {
+        insights.push({
+          tipo: "up", icone: "📈",
+          titulo: `Crescimento da ${capitalizar(linha.empresa)}`,
+          descricao: `Embarques subindo mês a mês: ${serieRelevante.join(" → ")}.`,
+        });
+        break; // só destaca uma empresa aqui, pra não poluir
+      }
+    }
+  }
+
+  // 2) maior volume operacional - só faz sentido comparando 2+ empresas
+  if (linhas.length >= 2 && totalDiarias > 0 && totalEmbarques > 0) {
+    const lider = [...linhas].sort((a, b) => b.totalDiarias - a.totalDiarias)[0];
+    const participacaoDiarias = Math.round((lider.totalDiarias / totalDiarias) * 1000) / 10;
+    const participacaoEmbarques = Math.round((lider.numeroEmbarques / totalEmbarques) * 1000) / 10;
+    if (participacaoDiarias >= 60) {
+      insights.push({
+        tipo: "info", icone: "📊",
+        titulo: "Maior volume operacional",
+        descricao: `${capitalizar(lider.empresa)} concentrou ${participacaoEmbarques}% dos embarques e ${participacaoDiarias}% das diárias do período.`,
+      });
+    }
+  }
+
+  // 3) pendências em aberto - um alerta por empresa que tiver
+  for (const linha of linhas) {
+    if (linha.comPendencia > 0) {
+      insights.push({
+        tipo: "alerta", icone: "⚠️",
+        titulo: `Pendência${linha.comPendencia > 1 ? "s" : ""} na ${capitalizar(linha.empresa)}`,
+        descricao: `${linha.comPendencia} embarque${linha.comPendencia > 1 ? "s" : ""} encerrado${linha.comPendencia > 1 ? "s" : ""} com pendência em aberto - vale conferir antes de reportar.`,
+      });
+    }
+  }
+
+  // 4) concentração de risco - empresa rodando com 1 colaborador só
+  for (const linha of linhas) {
+    if (linha.colaboradoresDistintos === 1) {
+      insights.push({
+        tipo: "info", icone: "👥",
+        titulo: `Concentração de recursos na ${capitalizar(linha.empresa)}`,
+        descricao: `Toda a operação da ${capitalizar(linha.empresa)} no período dependeu de 1 único colaborador.`,
+      });
+    }
+  }
+
+  // 5) produtividade por colaborador - só faz sentido comparando 2+ empresas
+  const comColaboradores = linhas.filter((l) => l.colaboradoresDistintos > 0);
+  if (comColaboradores.length >= 2) {
+    const partes = comColaboradores.map(
+      (l) => `${capitalizar(l.empresa)}: ${Math.round((l.totalDiarias / l.colaboradoresDistintos) * 10) / 10} diárias/colaborador`
+    );
+    insights.push({
+      tipo: "info", icone: "⚙️",
+      titulo: "Produtividade por colaborador",
+      descricao: `${partes.join(" · ")}.`,
+    });
+  }
+
+  return insights.slice(0, 5); // no máximo 5, pra não lotar a lateral
 }
