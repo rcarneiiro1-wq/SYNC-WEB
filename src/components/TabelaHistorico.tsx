@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { formatarDataBr, type LinhaHistorico, type ItensPorStatus, type Obra } from "@/lib/embarques";
+import { formatarDataBr, normalizarBusca, type LinhaHistorico, type ItensPorStatus, type Obra } from "@/lib/embarques";
 import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
 import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
 import { SecaoAnexos } from "@/components/SecaoAnexos";
@@ -395,18 +395,35 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
 
   const gruposPorPlataforma = useMemo(() => {
     if (modoAgrupamento !== "plataforma") return null;
-    // agrupa pelo obra_id (cada plataforma/obra é uma entrada estável no
-    // cadastro) - diferente do agrupamento por pessoa, aqui não existe o
-    // problema de "nome mudou depois", então não precisa escolher entre
-    // várias versões de nome: a obra é sempre a mesma, só pega direto.
-    const mapa = new Map<string, { obra: Obra | null; linhas: LinhaHistorico[] }>();
+    // 27/11 (achado testando com dado real, pedido do Rafael pra corrigir
+    // "pra ontem"): o `obra_id` sozinho NÃO identifica a mesma plataforma
+    // física de forma confiável - confirmado no banco que cada ciclo de
+    // embarque costuma criar um cadastro de obra NOVO pra mesma plataforma
+    // (ex: "P-75" e "PLATAFORMA P-75" são 2 obras diferentes; "Almirante
+    // Barroso" e "ALMIRANTE BARROSO" idem). O `local_codigo` se mantém
+    // estável entre esses cadastros duplicados ("P75" nos dois, "MV-32" nos
+    // dois) - por isso agrupa por ELE (normalizado, tolerante a
+    // maiúsculo/acento/traço), não pelo obra_id. Só cai pro nome da obra
+    // quando ela nem tem local_codigo cadastrado (embarque bem antigo).
+    //
+    // Igual no agrupamento por pessoa: guarda a obra do embarque mais
+    // RECENTE do grupo pra decidir o nome/empresa mostrados no cabeçalho -
+    // mesma lógica de "mostra a versão mais atual do cadastro", não a
+    // primeira que apareceu.
+    const mapa = new Map<string, { obraMaisRecente: Obra | null; inicioMaisRecente: string; linhas: LinhaHistorico[] }>();
     for (const linha of linhasOrdenadas) {
-      const chave = linha.embarque.obra_id || `obra:${linha.obra?.nome || linha.embarque.obra_nome || "Sem plataforma"}`;
+      const codigoOuNome = linha.obra?.local_codigo || linha.obra?.nome || linha.embarque.obra_nome || "Sem plataforma";
+      const chave = normalizarBusca(codigoOuNome);
+      const inicioDessaLinha = linha.inicioReal || "";
       const grupo = mapa.get(chave);
       if (!grupo) {
-        mapa.set(chave, { obra: linha.obra, linhas: [linha] });
-      } else {
-        grupo.linhas.push(linha);
+        mapa.set(chave, { obraMaisRecente: linha.obra, inicioMaisRecente: inicioDessaLinha, linhas: [linha] });
+        continue;
+      }
+      grupo.linhas.push(linha);
+      if (inicioDessaLinha > grupo.inicioMaisRecente) {
+        grupo.obraMaisRecente = linha.obra;
+        grupo.inicioMaisRecente = inicioDessaLinha;
       }
     }
     return Array.from(mapa.entries());
@@ -560,17 +577,18 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                   ))
                 : gruposPorPlataforma
                 ? gruposPorPlataforma.map(([chave, grupo]) => {
-                    const cor = grupo.obra?.empresa ? corDaEmpresa(grupo.obra.empresa).fg : undefined;
+                    const obra = grupo.obraMaisRecente;
+                    const cor = obra?.empresa ? corDaEmpresa(obra.empresa).fg : undefined;
                     return (
                       <Fragment key={`grupo-${chave}`}>
                         <tr className="bg-navy/5">
                           <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                             <span className="inline-flex items-center gap-1.5">
                               {cor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />}
-                              {grupo.obra?.nome || grupo.obra?.local_codigo || "Sem plataforma"}
+                              {obra?.nome || obra?.local_codigo || "Sem plataforma"}
                             </span>
-                            {grupo.obra?.empresa && (
-                              <span className="font-normal text-gray-400 normal-case ml-1">({grupo.obra.empresa})</span>
+                            {obra?.empresa && (
+                              <span className="font-normal text-gray-400 normal-case ml-1">({obra.empresa})</span>
                             )}
                             <span className="font-normal text-gray-400 normal-case"> — {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
                           </td>
