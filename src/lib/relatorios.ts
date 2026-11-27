@@ -509,3 +509,345 @@ export function gerarInsights(linhas: LinhaRelatorioEmpresa[], evolucao: PontoEv
 
   return insights.slice(0, 5); // no máximo 5, pra não lotar a lateral
 }
+
+// ---------------------------------------------------------------------
+// Comparativo entre colaboradores (27/11) - item novo na Sidebar, só pra
+// gestão, pedido do Rafael depois de ver o mockup: "quem está embarcando
+// mais e menos". Reaproveita os MESMOS helpers acima (intervaloRealDoEmbarque
+// + diasSobrepostos), só que agrupando por COLABORADOR em vez de empresa.
+// ---------------------------------------------------------------------
+
+export type ColaboradorResumo = { id: string; nome: string; empresa: string | null };
+
+/** Lista mestra de colaboradores ativos, pro seletor de filtro da tela -
+ * independente do período selecionado (igual `buscarEmpresasCadastradas`
+ * já faz pro seletor de empresas), pra dar pra escolher alguém mesmo sem
+ * embarque no recorte atual. */
+export async function buscarColaboradoresCadastrados(): Promise<ColaboradorResumo[]> {
+  const { data, error } = await supabase
+    .from("colaboradores")
+    .select("id::text, nome, empresa")
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
+  if (error || !data) return [];
+  return data as unknown as ColaboradorResumo[];
+}
+
+export type LinhaComparativoColaborador = {
+  colaboradorId: string;
+  nome: string;
+  funcao: string | null;
+  empresa: string;
+  numeroEmbarques: number;
+  totalDiarias: number;
+  percentualMedio: number | null;
+  completos: number;
+  comPendencia: number;
+  ativos: number;
+  // "Está embarcado agora" OU "há quantos dias parado" - calculado em
+  // cima do histórico INTEIRO da pessoa (não só o que caiu dentro do
+  // período escolhido na tela), porque isso é sobre o AGORA, não sobre o
+  // recorte - ver nota na implementação abaixo.
+  embarcadoAgora: boolean;
+  diasParado: number | null; // null quando embarcado agora, ou sem nenhum embarque encerrado ainda
+  embarques: DetalheEmbarqueRelatorio[];
+};
+
+/** Mesma conta de `buscarRelatorioPorEmpresa`, só que por colaborador -
+ * pra ver "quem embarcou mais/menos" no período. */
+export async function buscarComparativoColaboradores(periodo: Periodo): Promise<LinhaComparativoColaborador[]> {
+  const COLUNAS_EMBARQUES =
+    "id::text, obra_id::text, obra_nome, colaborador_id::text, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+    "status_final, justificativa_encerramento";
+  const COLUNAS_OBRAS = "id::text, nome, empresa";
+  const COLUNAS_RDOS =
+    "id::text, embarque_id::text, numero_rdo, data, avanco_percentual, avanco_json, justificativa_percentual";
+
+  const { data: embarquesRaw, error: erroEmb } = await supabase
+    .from("embarques")
+    .select(COLUNAS_EMBARQUES)
+    .lte("data_inicio", periodo.fim)
+    .or(`data_fim.gte.${periodo.inicio},data_fim.is.null`);
+  if (erroEmb) throw new Error(`Não consegui buscar os embarques: ${erroEmb.message}`);
+  if (!embarquesRaw || embarquesRaw.length === 0) return [];
+  const embarques = embarquesRaw as unknown as Embarque[];
+
+  const idsObras = Array.from(new Set(embarques.map((e) => e.obra_id).filter(Boolean)));
+  const idsEmbarques = embarques.map((e) => e.id);
+  const [{ data: obrasRaw, error: erroObras }, { data: rdosRaw, error: erroRdos }] = await Promise.all([
+    supabase.from("obras").select(COLUNAS_OBRAS).in("id", idsObras),
+    supabase.from("rdos").select(COLUNAS_RDOS).in("embarque_id", idsEmbarques),
+  ]);
+  if (erroObras) throw new Error(`Não consegui buscar as obras: ${erroObras.message}`);
+  if (erroRdos) throw new Error(`Não consegui buscar os RDOs: ${erroRdos.message}`);
+  const obras = obrasRaw as unknown as Obra[];
+  const rdos = rdosRaw as unknown as Rdo[];
+
+  const obrasPorId = new Map<string, Obra>((obras || []).map((o) => [o.id, o]));
+  const rdosPorEmbarque = new Map<string, Rdo[]>();
+  for (const rdo of rdos || []) {
+    const lista = rdosPorEmbarque.get(rdo.embarque_id) || [];
+    lista.push(rdo);
+    rdosPorEmbarque.set(rdo.embarque_id, lista);
+  }
+
+  function formatarCurto(iso: string): string {
+    const [, mes, dia] = iso.split("-");
+    return `${dia}/${mes}`;
+  }
+
+  type Acumulador = {
+    nome: string;
+    funcao: string | null;
+    empresa: string;
+    ultimaDataInicio: string; // pra saber qual embarque é o mais recente e usar o nome/função/empresa dele
+    numeroEmbarques: number;
+    totalDiarias: number;
+    percentuais: number[];
+    completos: number;
+    comPendencia: number;
+    ativos: number;
+    embarques: DetalheEmbarqueRelatorio[];
+  };
+  const porColaborador = new Map<string, Acumulador>();
+
+  for (const embarque of embarques) {
+    const obra = obrasPorId.get(embarque.obra_id);
+    const empresa = (obra?.empresa || "sem empresa").trim();
+    const listaRdos = rdosPorEmbarque.get(embarque.id) || [];
+    const { inicio, fim } = intervaloRealDoEmbarque(embarque, listaRdos);
+    if (!inicio) continue;
+
+    const diarias = diasSobrepostos(inicio, fim, periodo.inicio, periodo.fim);
+    if (diarias === 0) continue;
+
+    // mesma identidade estável usada em `buscarRelatorioPorEmpresa` - agrupa
+    // por colaborador_id, com fallback pro nome só pra embarque muito antigo
+    const chave = embarque.colaborador_id || (embarque.efetivo_nome ? `nome:${embarque.efetivo_nome}` : null);
+    if (!chave) continue;
+
+    const acc = porColaborador.get(chave) || {
+      nome: embarque.efetivo_nome || "-",
+      funcao: embarque.efetivo_funcao || null,
+      empresa,
+      ultimaDataInicio: "",
+      numeroEmbarques: 0,
+      totalDiarias: 0,
+      percentuais: [],
+      completos: 0,
+      comPendencia: 0,
+      ativos: 0,
+      embarques: [],
+    };
+
+    acc.totalDiarias += diarias;
+    if (inicio >= periodo.inicio && inicio <= periodo.fim) acc.numeroEmbarques += 1;
+
+    // nome/função/empresa exibidos sempre vêm do embarque mais recente (igual
+    // `efetivo_nome` já é tratado como "snapshot" em todo o resto do sistema)
+    if (embarque.data_inicio && embarque.data_inicio >= acc.ultimaDataInicio) {
+      acc.ultimaDataInicio = embarque.data_inicio;
+      acc.nome = embarque.efetivo_nome || acc.nome;
+      acc.funcao = embarque.efetivo_funcao || acc.funcao;
+      acc.empresa = empresa;
+    }
+
+    const ultimoRdo = [...listaRdos].sort((a, b) => b.numero_rdo - a.numero_rdo)[0];
+    const percentual = ultimoRdo?.avanco_percentual;
+    if (percentual !== null && percentual !== undefined) acc.percentuais.push(percentual);
+
+    let itensPendentes: string[] = [];
+    if (ultimoRdo?.avanco_json) {
+      try {
+        const avanco = JSON.parse(ultimoRdo.avanco_json) as Record<string, string>;
+        itensPendentes = Object.entries(avanco).filter(([, status]) => status !== "concluido").map(([nome]) => nome);
+      } catch {
+        itensPendentes = [];
+      }
+    }
+
+    const inicioNoRecorte = inicio > periodo.inicio ? inicio : periodo.inicio;
+    const fimNoRecorte = fim < periodo.fim ? fim : periodo.fim;
+
+    const statusFinal = (embarque.status_final as "completo" | "com_pendencia" | null) ?? null;
+    if (statusFinal === "completo") acc.completos += 1;
+    else if (statusFinal === "com_pendencia") acc.comPendencia += 1;
+    else if (embarque.ativo) acc.ativos += 1;
+
+    acc.embarques.push({
+      embarqueId: embarque.id,
+      colaborador: embarque.efetivo_nome || "-",
+      obra: obra?.nome || embarque.obra_nome || "-",
+      periodoNoRecorte: `${formatarCurto(inicioNoRecorte)} → ${formatarCurto(fimNoRecorte)}`,
+      diariasNoRecorte: diarias,
+      percentualUltimoRdo: percentual ?? null,
+      itensPendentes,
+      justificativa: ultimoRdo?.justificativa_percentual || null,
+      aindaAtivo: Boolean(embarque.ativo),
+      statusFinal,
+      justificativaEncerramento: embarque.justificativa_encerramento || null,
+    });
+
+    porColaborador.set(chave, acc);
+  }
+
+  const chaves = Array.from(porColaborador.keys());
+  if (chaves.length === 0) return [];
+
+  // --- "Embarcado agora" / "dias parado" - calculado sobre o HISTÓRICO
+  // INTEIRO de cada pessoa, não só o que caiu dentro do período escolhido
+  // na tela (senão olhar "Ano todo 2025" em 2026 ia mostrar tempo parado
+  // errado, travado na virada do período). Busca de novo, sem filtro de
+  // data, só pra essas pessoas. ---
+  const colaboradorIdsReais = chaves.filter((c) => !c.startsWith("nome:"));
+  const nomesReais = chaves.filter((c) => c.startsWith("nome:")).map((c) => c.slice(5));
+
+  const [porId, porNome] = await Promise.all([
+    colaboradorIdsReais.length > 0
+      ? supabase.from("embarques").select("id::text, colaborador_id::text, efetivo_nome, data_inicio, data_fim, ativo").in("colaborador_id", colaboradorIdsReais)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
+    nomesReais.length > 0
+      ? supabase.from("embarques").select("id::text, colaborador_id::text, efetivo_nome, data_inicio, data_fim, ativo").in("efetivo_nome", nomesReais)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
+  ]);
+  if (porId.error) throw new Error(`Não consegui checar a última atividade: ${porId.error.message}`);
+  if (porNome.error) throw new Error(`Não consegui checar a última atividade: ${porNome.error.message}`);
+
+  const historico = [...(porId.data || []), ...(porNome.data || [])] as unknown as Embarque[];
+  const idsEmbarquesHistorico = historico.map((e) => e.id);
+  const { data: rdosHistoricoRaw, error: erroRdosHist } =
+    idsEmbarquesHistorico.length > 0
+      ? await supabase.from("rdos").select("id::text, embarque_id::text, numero_rdo, data").in("embarque_id", idsEmbarquesHistorico)
+      : { data: [] as unknown[], error: null };
+  if (erroRdosHist) throw new Error(`Não consegui checar os RDOs da última atividade: ${erroRdosHist.message}`);
+  const rdosHistorico = (rdosHistoricoRaw || []) as unknown as Rdo[];
+  const rdosHistPorEmbarque = new Map<string, Rdo[]>();
+  for (const r of rdosHistorico) {
+    const lista = rdosHistPorEmbarque.get(r.embarque_id) || [];
+    lista.push(r);
+    rdosHistPorEmbarque.set(r.embarque_id, lista);
+  }
+
+  const hoje = formatarISO(new Date());
+  const atividadePorChave = new Map<string, { embarcadoAgora: boolean; diasParado: number | null }>();
+  for (const chave of chaves) {
+    const meus = historico.filter((e) => (chave.startsWith("nome:") ? e.efetivo_nome === chave.slice(5) : e.colaborador_id === chave));
+    if (meus.length === 0) {
+      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null });
+      continue;
+    }
+    if (meus.some((e) => e.ativo)) {
+      atividadePorChave.set(chave, { embarcadoAgora: true, diasParado: null });
+      continue;
+    }
+    let fimMaisRecente: string | null = null;
+    for (const e of meus) {
+      const { fim } = intervaloRealDoEmbarque(e, rdosHistPorEmbarque.get(e.id) || []);
+      if (!fimMaisRecente || fim > fimMaisRecente) fimMaisRecente = fim;
+    }
+    if (!fimMaisRecente) {
+      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null });
+      continue;
+    }
+    const diffMs = new Date(hoje + "T00:00:00").getTime() - new Date(fimMaisRecente + "T00:00:00").getTime();
+    atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: Math.max(0, Math.round(diffMs / 86400000)) });
+  }
+
+  return Array.from(porColaborador.entries())
+    .map(([chave, acc]) => {
+      const atividade = atividadePorChave.get(chave) || { embarcadoAgora: false, diasParado: null };
+      return {
+        colaboradorId: chave,
+        nome: acc.nome,
+        funcao: acc.funcao,
+        empresa: acc.empresa,
+        numeroEmbarques: acc.numeroEmbarques,
+        totalDiarias: acc.totalDiarias,
+        percentualMedio:
+          acc.percentuais.length > 0 ? Math.round(acc.percentuais.reduce((s, p) => s + p, 0) / acc.percentuais.length) : null,
+        completos: acc.completos,
+        comPendencia: acc.comPendencia,
+        ativos: acc.ativos,
+        embarcadoAgora: atividade.embarcadoAgora,
+        diasParado: atividade.diasParado,
+        embarques: acc.embarques.sort((a, b) => b.diariasNoRecorte - a.diariasNoRecorte),
+      };
+    })
+    .sort((a, b) => b.totalDiarias - a.totalDiarias);
+}
+
+/** Insights do Comparativo entre colaboradores - mesma filosofia de
+ * `gerarInsights` (regra simples, sem IA, nunca fica vazio), mas pensado
+ * pra escalar com o time crescendo (25+ pessoas): só destaca o PIOR caso
+ * de tempo parado (não todo mundo que estiver parado), e só fala de
+ * equilíbrio/liderança quando fizer sentido comparar. */
+export function gerarInsightsComparativo(linhas: LinhaComparativoColaborador[]): Insight[] {
+  const insights: Insight[] = [];
+  if (linhas.length === 0) return insights;
+
+  const totalDiarias = linhas.reduce((s, l) => s + l.totalDiarias, 0);
+  const totalEmbarques = linhas.reduce((s, l) => s + l.numeroEmbarques, 0);
+
+  // 1) maior tempo parado - só o pior caso, e só a partir de ~2 semanas
+  // (pra não virar alerta pra quem acabou de desembarcar há 3 dias)
+  const parados = linhas.filter((l) => !l.embarcadoAgora && l.diasParado !== null && l.diasParado >= 14);
+  if (parados.length > 0) {
+    const pior = [...parados].sort((a, b) => (b.diasParado ?? 0) - (a.diasParado ?? 0))[0];
+    insights.push({
+      tipo: "alerta", icone: "⏸️",
+      titulo: `${capitalizar(pior.nome)} parado há ${pior.diasParado} dias`,
+      descricao: `Último embarque finalizado há ${pior.diasParado} dias - é o maior tempo parado do grupo nesse recorte.`,
+    });
+  }
+
+  // 2) líder de volume - só faz sentido comparando 2+ pessoas
+  if (linhas.length >= 2 && totalDiarias > 0) {
+    const lider = [...linhas].sort((a, b) => b.totalDiarias - a.totalDiarias)[0];
+    const participacao = Math.round((lider.totalDiarias / totalDiarias) * 1000) / 10;
+    insights.push({
+      tipo: "info", icone: "🏆",
+      titulo: `${capitalizar(lider.nome)} lidera em volume`,
+      descricao: `${lider.totalDiarias} diária${lider.totalDiarias === 1 ? "" : "s"} no período (${participacao}% do total do grupo).`,
+    });
+  }
+
+  // 3) equilíbrio - os dois primeiros colocados bem próximos (<=10% de diferença)
+  if (linhas.length >= 2) {
+    const [primeiro, segundo] = [...linhas].sort((a, b) => b.totalDiarias - a.totalDiarias);
+    if (segundo && primeiro.totalDiarias > 0) {
+      const diferenca = primeiro.totalDiarias - segundo.totalDiarias;
+      const diferencaPct = Math.round((diferenca / primeiro.totalDiarias) * 1000) / 10;
+      if (diferencaPct <= 10) {
+        insights.push({
+          tipo: "info", icone: "⚖️",
+          titulo: `${capitalizar(primeiro.nome)} e ${capitalizar(segundo.nome)} estão equilibrados`,
+          descricao: `Diferença de só ${diferenca} diária${diferenca === 1 ? "" : "s"} entre os dois no período.`,
+        });
+      }
+    }
+  }
+
+  // 4) pendências em aberto
+  const comPendencia = linhas.filter((l) => l.comPendencia > 0);
+  if (comPendencia.length > 0) {
+    const total = comPendencia.reduce((s, l) => s + l.comPendencia, 0);
+    insights.push({
+      tipo: "alerta", icone: "⚠️",
+      titulo: `${total} pendência${total === 1 ? "" : "s"} em aberto`,
+      descricao: comPendencia.map((l) => `${capitalizar(l.nome)} (${l.comPendencia})`).join(", ") + ".",
+    });
+  }
+
+  // nunca fica vazio - mesmo fallback de `gerarInsights`
+  if (insights.length === 0) {
+    insights.push({
+      tipo: "info", icone: "📌",
+      titulo: linhas.length === 1 ? `Resumo de ${capitalizar(linhas[0].nome)}` : "Resumo do período",
+      descricao:
+        `${totalEmbarques} embarque${totalEmbarques === 1 ? "" : "s"} e ${totalDiarias} diária${totalDiarias === 1 ? "" : "s"} no período` +
+        (linhas.length === 1 && linhas[0].percentualMedio !== null ? `, com avanço médio de ${linhas[0].percentualMedio}%.` : "."),
+    });
+  }
+
+  return insights.slice(0, 5);
+}

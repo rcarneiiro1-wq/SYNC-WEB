@@ -49,7 +49,10 @@ const CORES_FIXAS: Record<string, string> = {
   hydra: "#7FB2E5", // azul claro
 };
 
-function corPrincipalEmpresa(nome: string): string {
+/** Exportada (27/11) pra o Comparativo entre colaboradores colorir o
+ * ranking/badges pela MESMA cor da empresa, em vez de inventar uma paleta
+ * nova - mantém "cor segue a identidade" consistente entre as duas telas. */
+export function corPrincipalEmpresa(nome: string): string {
   const fixa = CORES_FIXAS[nome.trim().toLowerCase()];
   if (fixa) return fixa;
   // fallback determinístico (mesma lógica do SeletorEmpresas) pra empresas futuras

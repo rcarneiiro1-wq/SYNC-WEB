@@ -27,6 +27,7 @@ import {
   Workflow,
   ScanSearch,
   IdCard,
+  Users2,
 } from "lucide-react";
 
 type ItemMenu = { rotulo: string; href: string; icone: React.ElementType };
@@ -38,6 +39,7 @@ const ITENS_EMBARQUE: ItemMenu[] = [
   { rotulo: "Histórico", href: "/historico", icone: Clock },
   { rotulo: "Relatório por empresa", href: "/relatorios", icone: Building2 },
   { rotulo: "Histórico colaborador", href: "/historico-colaborador", icone: Users },
+  { rotulo: "Comparativo entre colaboradores", href: "/comparativo-colaboradores", icone: Users2 },
   { rotulo: "Relatório de embarcados", href: "/relatorio-embarcados", icone: Printer },
 ];
 
