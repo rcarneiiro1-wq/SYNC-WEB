@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   prepararUploadDocumentoPlataforma,
@@ -23,21 +24,39 @@ import type { CategoriaDocumento } from "@/lib/documentosPlataformaTipos";
 export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; categoria: CategoriaDocumento }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [pendentes, setPendentes] = useState<File[] | null>(null);
   const [observacao, setObservacao] = useState("");
+  // 27/11 (bug reportado pelo Rafael): o painel da observação ficava
+  // "dentro do quadrado" do card, cortado/espremido - porque cada card de
+  // categoria tem `overflow-hidden` (só pra arredondar os cantos), e isso
+  // corta QUALQUER filho `position: absolute` que tente passar da borda do
+  // card. Resolvido com portal pro `document.body` + `position: fixed`
+  // calculado pela posição real do botão na tela - assim o painel flutua
+  // livre, por cima de tudo, sem ficar preso ao card.
+  const [posicaoPainel, setPosicaoPainel] = useState<{ top: number; left: number } | null>(null);
 
   const aoEscolherArquivos = (arquivos: FileList | null) => {
     if (!arquivos || arquivos.length === 0) return;
     setErro(null);
     setObservacao("");
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    const LARGURA_PAINEL = 288; // w-72
+    if (rect) {
+      setPosicaoPainel({
+        top: rect.bottom + 6,
+        left: Math.min(Math.max(8, rect.right - LARGURA_PAINEL), window.innerWidth - LARGURA_PAINEL - 8),
+      });
+    }
     setPendentes(Array.from(arquivos));
   };
 
   const cancelar = () => {
     setPendentes(null);
     setObservacao("");
+    setPosicaoPainel(null);
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -89,6 +108,7 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
       }
       setPendentes(null);
       setObservacao("");
+      setPosicaoPainel(null);
     } catch {
       setErro("Não consegui completar o envio - confere a internet e tenta de novo.");
     } finally {
@@ -99,7 +119,7 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
   };
 
   return (
-    <div className="relative flex flex-col items-end gap-1">
+    <div ref={wrapperRef} className="relative flex flex-col items-end gap-1">
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -118,44 +138,50 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
       />
       {erro && <p className="text-[11px] text-vermelho text-right max-w-[220px]">{erro}</p>}
 
-      {pendentes && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => !processando && cancelar()} />
-          <div className="absolute right-0 top-9 z-50 w-64 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-left">
-            <p className="text-xs font-semibold text-navy mb-1">
-              {pendentes.length === 1 ? pendentes[0].name : `${pendentes.length} arquivos selecionados`}
-            </p>
-            <label className="block text-[11px] text-gray-500 mb-1">Observação (opcional)</label>
-            <textarea
-              autoFocus
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-              placeholder="ex: MD de escaneamento de linhas"
-              rows={2}
-              disabled={processando}
-              className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-azul disabled:opacity-60"
-            />
-            <div className="flex items-center justify-end gap-2 mt-2">
-              <button
-                type="button"
-                onClick={cancelar}
+      {pendentes &&
+        posicaoPainel &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => !processando && cancelar()} />
+            <div
+              style={{ top: posicaoPainel.top, left: posicaoPainel.left }}
+              className="fixed z-50 w-72 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-left"
+            >
+              <p className="text-xs font-semibold text-navy mb-1 break-words">
+                {pendentes.length === 1 ? pendentes[0].name : `${pendentes.length} arquivos selecionados`}
+              </p>
+              <label className="block text-[11px] text-gray-500 mb-1">Observação (opcional)</label>
+              <textarea
+                autoFocus
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="ex: MD de escaneamento de linhas"
+                rows={2}
                 disabled={processando}
-                className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 cursor-pointer disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={confirmarEnvio}
-                disabled={processando}
-                className="text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md px-3 py-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
-              >
-                {processando ? "Enviando..." : "Enviar"}
-              </button>
+                className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-azul disabled:opacity-60"
+              />
+              <div className="flex items-center justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={cancelar}
+                  disabled={processando}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 cursor-pointer disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmarEnvio}
+                  disabled={processando}
+                  className="text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md px-3 py-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
+                >
+                  {processando ? "Enviando..." : "Enviar"}
+                </button>
+              </div>
             </div>
-          </div>
-        </>
-      )}
+          </>,
+          document.body
+        )}
     </div>
   );
 }
