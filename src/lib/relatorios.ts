@@ -490,5 +490,22 @@ export function gerarInsights(linhas: LinhaRelatorioEmpresa[], evolucao: PontoEv
     });
   }
 
+  // 27/11: quando nenhuma regra acima disparou (ex: 1 empresa só, sem
+  // pendência, histórico curto demais pra falar de tendência) o painel
+  // ficava vazio - o Rafael pediu pra sempre ter alguma coisa ali, nem
+  // que seja um resumo simples. Fica só com os números que já existem
+  // (nada inventado); no futuro dá pra trocar por uma IA de verdade.
+  if (insights.length === 0) {
+    insights.push({
+      tipo: "info", icone: "📌",
+      titulo: linhas.length === 1 ? `Resumo da ${capitalizar(linhas[0].empresa)}` : "Resumo do período",
+      descricao:
+        `${totalEmbarques} embarque${totalEmbarques === 1 ? "" : "s"} e ${totalDiarias} diária${totalDiarias === 1 ? "" : "s"} no período` +
+        (linhas.length === 1 && linhas[0].percentualMedio !== null
+          ? `, com avanço médio de ${linhas[0].percentualMedio}%.`
+          : "."),
+    });
+  }
+
   return insights.slice(0, 5); // no máximo 5, pra não lotar a lateral
 }
