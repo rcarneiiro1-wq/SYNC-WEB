@@ -413,11 +413,40 @@ export type FiltrosHistorico = {
  * texto, sem juntar com RDOs), então é seguro rodar assim que a tela
  * de filtros abre, sem violar a ideia de "nada pesado antes do Buscar". */
 export async function buscarOpcoesFiltro(): Promise<{ colaboradores: string[]; obras: string[] }> {
-  const { data, error } = await supabase.from("embarques").select("efetivo_nome, obra_nome").eq("ativo", false);
+  const [{ data, error }, { data: dataObras }] = await Promise.all([
+    supabase.from("embarques").select("efetivo_nome, obra_nome").eq("ativo", false),
+    // 27/11 (pedido do Rafael): sugere também o código da plataforma e os
+    // números de MD/GM cadastrados na obra, não só o nome do embarque - é
+    // exatamente o que ele pediu pra poder digitar na busca ("MV33",
+    // "MV-33", o número do MD/GM). O datalist é só um atalho de
+    // preenchimento; a busca em si (abaixo) já aceita qualquer um desses
+    // mesmo sem escolher da lista.
+    supabase.from("obras").select("nome, local_codigo, md_codigo, gm_codigo"),
+  ]);
   if (error || !data) return { colaboradores: [], obras: [] };
   const colaboradores = Array.from(new Set(data.map((e) => e.efetivo_nome).filter((v): v is string => Boolean(v)))).sort();
-  const obras = Array.from(new Set(data.map((e) => e.obra_nome).filter((v): v is string => Boolean(v)))).sort();
+  const obrasTexto = [
+    ...data.map((e) => e.obra_nome),
+    ...((dataObras as unknown as { nome: string | null; local_codigo: string | null; md_codigo: string | null; gm_codigo: string | null }[]) || []).flatMap(
+      (o) => [o.nome, o.local_codigo, o.md_codigo, o.gm_codigo]
+    ),
+  ];
+  const obras = Array.from(new Set(obrasTexto.filter((v): v is string => Boolean(v && v.trim())))).sort();
   return { colaboradores, obras };
+}
+
+/** Normaliza texto de busca livre pra comparação "tolerante": maiúsculo,
+ * sem acento, sem espaço/traço/pontuação - assim "mv33", "mv-33", "MV 33"
+ * batem todos com o código cadastrado "MV-33". Mesma ideia da
+ * `normalizarCodigo` em documentosPlataforma.ts, duplicada aqui (em vez de
+ * importada) pra não criar import circular - aquele arquivo já importa
+ * DESTE. */
+function normalizarBusca(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 /** Todas as empresas já cadastradas em alguma obra - usado pra montar os
@@ -444,7 +473,51 @@ const COLUNAS_RDOS =
 export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {}): Promise<LinhaHistorico[]> {
   let query = supabase.from("embarques").select(COLUNAS_EMBARQUES).eq("ativo", false);
   if (filtros.colaborador) query = query.ilike("efetivo_nome", `%${filtros.colaborador}%`);
-  if (filtros.obra) query = query.ilike("obra_nome", `%${filtros.obra}%`);
+
+  if (filtros.obra) {
+    // 27/11 (pedido do Rafael, achado em produção): um ILIKE direto no
+    // `obra_nome` (texto snapshot do embarque) falhava em dois casos
+    // reais: 1) traço/maiúscula diferente - "mv33" não batia com "MV-33"
+    // por causa do traço no meio, e o pessoal que vai usar é leigo, não
+    // dá pra exigir digitar certinho; 2) o snapshot pode ter sido salvo
+    // ANTES da obra ganhar esse nome/código (achado de verdade: um
+    // embarque de set/2026 na plataforma "MV-33" tem `obra_nome` salvo só
+    // como "PCCS Piping Project", sem nenhum "MV33" - o nome mudou
+    // DEPOIS, mas o snapshot nunca se atualiza retroativamente, mesma
+    // regra de sempre, ver `efetivo_nome`). Por isso a busca agora resolve
+    // pela OBRA cadastrada (nome, código da plataforma, número do MD e do
+    // GM - os 4 jeitos que o Rafael pediu pra poder digitar), tudo
+    // normalizado (sem acento/maiúsculo/traço/espaço), e filtra pelo
+    // `obra_id` estável - que não muda mesmo se a obra for renomeada.
+    const buscaNormalizada = normalizarBusca(filtros.obra);
+    if (buscaNormalizada) {
+      const { data: obrasBusca } = await supabase
+        .from("obras")
+        .select("id::text, nome, local_codigo, md_codigo, gm_codigo");
+      const idsObraCombinando = (
+        (obrasBusca as unknown as {
+          id: string; nome: string | null; local_codigo: string | null; md_codigo: string | null; gm_codigo: string | null;
+        }[]) || []
+      )
+        .filter((o) =>
+          [o.nome, o.local_codigo, o.md_codigo, o.gm_codigo].some(
+            (campo) => campo && normalizarBusca(campo).includes(buscaNormalizada)
+          )
+        )
+        .map((o) => o.id);
+
+      // achou pelo menos 1 obra cadastrada batendo -> filtra pelo id
+      // (estável). Não achou nenhuma -> mantém o ILIKE de texto como
+      // fallback, pra não quebrar busca livre que não corresponda a
+      // nenhuma obra cadastrada.
+      query = idsObraCombinando.length > 0
+        ? query.in("obra_id", idsObraCombinando)
+        : query.ilike("obra_nome", `%${filtros.obra}%`);
+    } else {
+      query = query.ilike("obra_nome", `%${filtros.obra}%`);
+    }
+  }
+
   if (filtros.dataInicio) query = query.gte("data_inicio", filtros.dataInicio);
   if (filtros.dataFim) query = query.lte("data_fim", filtros.dataFim);
   query = query.order("data_inicio", { ascending: false });
