@@ -140,7 +140,7 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
   // valor e quebre o cruzamento com "obras"/"rdos" mais abaixo (mesmo
   // bug corrigido em embarques.ts).
   const COLUNAS_EMBARQUES =
-    "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+    "id::text, obra_id::text, obra_nome, colaborador_id::text, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
     "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em";
   const COLUNAS_OBRAS =
     "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo";
@@ -219,7 +219,13 @@ export async function buscarRelatorioPorEmpresa(periodo: Periodo): Promise<Linha
     if (inicio >= periodo.inicio && inicio <= periodo.fim) {
       acumulador.numeroEmbarques += 1; // só conta "novo embarque" se ele começou dentro do período
     }
-    if (embarque.efetivo_nome) acumulador.colaboradores.add(embarque.efetivo_nome);
+    // 27/11: agrupa pelo colaborador_id (identidade estável), não pelo
+    // texto do nome - senão renomear alguém (ex: corrigir "Gustavo" pra
+    // "Gustavo Ricardo") inflava "Colaboradores distintos" contando a
+    // mesma pessoa duas vezes. Só cai pro nome em embarque muito antigo,
+    // de antes de colaborador_id existir.
+    const chaveColaborador = embarque.colaborador_id || (embarque.efetivo_nome ? `nome:${embarque.efetivo_nome}` : null);
+    if (chaveColaborador) acumulador.colaboradores.add(chaveColaborador);
     const ultimoRdo = [...listaRdos].sort((a, b) => b.numero_rdo - a.numero_rdo)[0];
     const percentual = ultimoRdo?.avanco_percentual;
     if (percentual !== null && percentual !== undefined) acumulador.percentuais.push(percentual);
