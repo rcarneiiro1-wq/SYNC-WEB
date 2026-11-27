@@ -18,8 +18,9 @@ export default async function PaginaRelatorioEmpresas() {
   return (
     <div className="min-h-screen">
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
-        <h1 className="text-xl font-bold text-navy mb-6">Relatório por empresa</h1>
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <h1 className="text-xl font-bold text-navy mb-1">Relatório por empresa</h1>
+        <p className="text-sm text-gray-500 mb-6">Desempenho de embarques, diárias e qualidade operacional.</p>
         <RelatorioEmpresasConteudo empresasCadastradas={empresasCadastradas} />
       </main>
     </div>
