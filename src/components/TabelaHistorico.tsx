@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { formatarDataBr, type LinhaHistorico, type ItensPorStatus } from "@/lib/embarques";
+import { Fragment, useMemo, useState } from "react";
+import { formatarDataBr, type LinhaHistorico, type ItensPorStatus, type Obra } from "@/lib/embarques";
 import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
 import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
 import { SecaoAnexos } from "@/components/SecaoAnexos";
+import { corDaEmpresa } from "@/components/SeletorEmpresas";
 
 function corPercentualBadge(percentual: number | null): string {
   if (percentual === null) return "bg-gray-100 text-gray-400";
@@ -26,7 +27,22 @@ function ResumoItens({ itensAvanco }: { itensAvanco: ItensPorStatus }) {
   );
 }
 
-type ColunaOrdenavel = "nome" | "periodo" | "dias" | "pendencias" | "percentual";
+type ColunaOrdenavel = "nome" | "empresa" | "periodo" | "dias" | "pendencias" | "percentual";
+
+/** Pequena bolinha colorida + texto - mesma linguagem visual dos cards de
+ * empresa (SeletorEmpresas) e do Comparativo entre colaboradores, pra
+ * "Empresa" aqui na tabela usar a MESMA cor que a empresa já usa em
+ * qualquer outro lugar do sistema (ver `corDaEmpresa`). */
+function EtiquetaEmpresa({ empresa }: { empresa: string | null | undefined }) {
+  if (!empresa) return <span className="text-gray-300 text-xs">-</span>;
+  const cor = corDaEmpresa(empresa);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap" style={{ color: cor.fg }}>
+      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor.fg }} />
+      {empresa}
+    </span>
+  );
+}
 
 function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
   if (!ativa) return <span className="text-gray-300 ml-1">↕</span>;
@@ -58,7 +74,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
 
   return (
     <tr>
-      <td colSpan={6} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
+      <td colSpan={7} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
         <div className="grid sm:grid-cols-2 gap-6">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Itens do escopo</p>
@@ -215,6 +231,10 @@ function LinhaTabela({
         </div>
       </td>
 
+      <td className="py-3.5 px-4">
+        <EtiquetaEmpresa empresa={obra?.empresa} />
+      </td>
+
       <td className="py-3.5 px-4 text-sm text-gray-600 whitespace-nowrap">
         {formatarDataBr(inicioReal)}
         <span className="text-gray-300 mx-1.5">→</span>
@@ -293,8 +313,13 @@ function CabecalhoOrdenavel({
   );
 }
 
+/** Modo de agrupamento da tabela - no máximo um por vez (agrupar por
+ * pessoa E por plataforma ao mesmo tempo não faz sentido estrutural,
+ * então é uma escolha única, não duas caixinhas independentes). */
+type ModoAgrupamento = "nenhum" | "pessoa" | "plataforma";
+
 export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
-  const [agruparPorPessoa, setAgruparPorPessoa] = useState(false);
+  const [modoAgrupamento, setModoAgrupamento] = useState<ModoAgrupamento>("nenhum");
   const [ordenarPor, setOrdenarPor] = useState<ColunaOrdenavel | null>(null);
   const [ordemAsc, setOrdemAsc] = useState(false);
   // string, não number: o id do embarque é maior do que o JS consegue
@@ -318,6 +343,8 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
       switch (ordenarPor) {
         case "nome":
           return sinal * (a.embarque.efetivo_nome || "").localeCompare(b.embarque.efetivo_nome || "");
+        case "empresa":
+          return sinal * (a.obra?.empresa || "").localeCompare(b.obra?.empresa || "");
         case "periodo":
           return sinal * (a.inicioReal || "").localeCompare(b.inicioReal || "");
         case "dias":
@@ -333,8 +360,8 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     return copia;
   }, [linhas, ordenarPor, ordemAsc]);
 
-  const grupos = useMemo(() => {
-    if (!agruparPorPessoa) return null;
+  const gruposPorPessoa = useMemo(() => {
+    if (modoAgrupamento !== "pessoa") return null;
     // 27/11: agrupa pelo colaborador_id (identidade estável), não pelo
     // texto de efetivo_nome - esse é só um retrato de como a pessoa se
     // chamava NA ÉPOCA de cada embarque, nunca muda depois de gravado.
@@ -364,7 +391,26 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
       }
     }
     return Array.from(mapa.entries());
-  }, [linhasOrdenadas, agruparPorPessoa]);
+  }, [linhasOrdenadas, modoAgrupamento]);
+
+  const gruposPorPlataforma = useMemo(() => {
+    if (modoAgrupamento !== "plataforma") return null;
+    // agrupa pelo obra_id (cada plataforma/obra é uma entrada estável no
+    // cadastro) - diferente do agrupamento por pessoa, aqui não existe o
+    // problema de "nome mudou depois", então não precisa escolher entre
+    // várias versões de nome: a obra é sempre a mesma, só pega direto.
+    const mapa = new Map<string, { obra: Obra | null; linhas: LinhaHistorico[] }>();
+    for (const linha of linhasOrdenadas) {
+      const chave = linha.embarque.obra_id || `obra:${linha.obra?.nome || linha.embarque.obra_nome || "Sem plataforma"}`;
+      const grupo = mapa.get(chave);
+      if (!grupo) {
+        mapa.set(chave, { obra: linha.obra, linhas: [linha] });
+      } else {
+        grupo.linhas.push(linha);
+      }
+    }
+    return Array.from(mapa.entries());
+  }, [linhasOrdenadas, modoAgrupamento]);
 
   const resumo = useMemo(() => {
     const total = linhas.length;
@@ -385,16 +431,15 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     contadorLinha += 1;
     const expandida = expandidoId === linha.embarque.id;
     return (
-      <>
+      <Fragment key={linha.embarque.id}>
         <LinhaTabela
-          key={linha.embarque.id}
           linha={linha}
           par={par}
           expandida={expandida}
           aoClicar={() => setExpandidoId(expandida ? null : linha.embarque.id)}
         />
-        {expandida && <LinhaExpandida key={`${linha.embarque.id}-exp`} linha={linha} />}
-      </>
+        {expandida && <LinhaExpandida linha={linha} />}
+      </Fragment>
     );
   };
 
@@ -419,11 +464,58 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-end mb-4">
-        <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
-          <input type="checkbox" checked={agruparPorPessoa} onChange={(e) => setAgruparPorPessoa(e.target.checked)} className="accent-azul" />
-          Agrupar por pessoa
-        </label>
+      {resumo.total > 0 && (
+        <div
+          className={`flex items-start gap-2 rounded-lg px-4 py-3 mb-5 text-sm ${
+            resumo.comPendencia === 0 ? "bg-verde/10 text-verde" : "bg-amarelo/10 text-amarelo"
+          }`}
+        >
+          <span className="mt-px">{resumo.comPendencia === 0 ? "✓" : "⚠"}</span>
+          <p>
+            {resumo.comPendencia === 0
+              ? `Nenhuma pendência em aberto nesse recorte — os ${resumo.total} embarque${resumo.total === 1 ? "" : "s"} encontrado${resumo.total === 1 ? "" : "s"} foram todos concluídos${resumo.media !== null ? ` (${resumo.media}%)` : ""}.`
+              : `${resumo.comPendencia} de ${resumo.total} embarque${resumo.total === 1 ? "" : "s"} nesse recorte ${resumo.comPendencia === 1 ? "está" : "estão"} com pendência — clica na linha pra ver o motivo.`}
+          </p>
+        </div>
+      )}
+
+      <div className="flex justify-end mb-4 overflow-x-auto">
+        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden text-sm shrink-0">
+          <button
+            type="button"
+            onClick={() => setModoAgrupamento("nenhum")}
+            className={`px-3 py-1.5 cursor-pointer transition-colors whitespace-nowrap ${
+              modoAgrupamento === "nenhum" ? "bg-navy text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Sem agrupamento
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoAgrupamento("pessoa")}
+            className={`px-3 py-1.5 border-l border-gray-200 cursor-pointer transition-colors whitespace-nowrap ${
+              modoAgrupamento === "pessoa" ? "bg-navy text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Agrupar por pessoa
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoAgrupamento("plataforma")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border-l border-gray-200 cursor-pointer transition-colors whitespace-nowrap ${
+              modoAgrupamento === "plataforma" ? "bg-navy text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+          >
+            Agrupar por plataforma
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                modoAgrupamento === "plataforma" ? "bg-white/20 text-white" : "bg-azul/10 text-azul"
+              }`}
+            >
+              NOVO
+            </span>
+          </button>
+        </div>
       </div>
 
       {linhasOrdenadas.length === 0 ? (
@@ -432,29 +524,61 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-sm">
-          <table className="w-full min-w-[760px]">
+          <table className="w-full min-w-[860px]">
             <thead>
               <tr className="border-b border-gray-200">
                 <CabecalhoOrdenavel label="Colaborador" coluna="nome" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
+                <CabecalhoOrdenavel label="Empresa" coluna="empresa" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Período" coluna="periodo" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Duração" coluna="dias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
                 <CabecalhoOrdenavel label="Pendências" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
                 <CabecalhoOrdenavel label="% Final" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">O que foi feito</th>
+                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  <span className="inline-flex items-center gap-1">
+                    O que foi feito
+                    <span
+                      className="text-gray-300 cursor-help normal-case font-normal"
+                      title="✓ = itens concluídos · ● = em andamento · ○ = a iniciar · 📝 = tem justificativa registrada · 📎 = relatório assinado anexado"
+                    >
+                      ⓘ
+                    </span>
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {grupos
-                ? grupos.map(([chave, grupo]) => (
-                    <>
-                      <tr key={`grupo-${chave}`} className="bg-navy/5">
-                        <td colSpan={6} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+              {gruposPorPessoa
+                ? gruposPorPessoa.map(([chave, grupo]) => (
+                    <Fragment key={`grupo-${chave}`}>
+                      <tr className="bg-navy/5">
+                        <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                           {grupo.nomeAtual} <span className="font-normal text-gray-400 normal-case">— {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
                         </td>
                       </tr>
                       {grupo.linhas.map((linha) => renderizarLinha(linha))}
-                    </>
+                    </Fragment>
                   ))
+                : gruposPorPlataforma
+                ? gruposPorPlataforma.map(([chave, grupo]) => {
+                    const cor = grupo.obra?.empresa ? corDaEmpresa(grupo.obra.empresa).fg : undefined;
+                    return (
+                      <Fragment key={`grupo-${chave}`}>
+                        <tr className="bg-navy/5">
+                          <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                            <span className="inline-flex items-center gap-1.5">
+                              {cor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />}
+                              {grupo.obra?.nome || grupo.obra?.local_codigo || "Sem plataforma"}
+                            </span>
+                            {grupo.obra?.empresa && (
+                              <span className="font-normal text-gray-400 normal-case ml-1">({grupo.obra.empresa})</span>
+                            )}
+                            <span className="font-normal text-gray-400 normal-case"> — {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
+                          </td>
+                        </tr>
+                        {grupo.linhas.map((linha) => renderizarLinha(linha))}
+                      </Fragment>
+                    );
+                  })
                 : linhasOrdenadas.map((linha) => renderizarLinha(linha))}
             </tbody>
           </table>
