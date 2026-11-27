@@ -5,16 +5,18 @@ import {
   buscarRelatorioPorEmpresa,
   periodoMesCalendario,
   periodoFechamento,
+  periodoAnoCalendario,
   periodoAdjacente,
   type Periodo,
   type LinhaRelatorioEmpresa,
 } from "@/lib/relatorios";
 import { SeletorEmpresas } from "@/components/SeletorEmpresas";
 
-type TipoPeriodo = "calendario" | "fechamento";
+type TipoPeriodo = "calendario" | "fechamento" | "ano";
 
 function periodoAtual(tipo: TipoPeriodo): Periodo {
   const hoje = new Date();
+  if (tipo === "ano") return periodoAnoCalendario(hoje.getFullYear());
   return tipo === "fechamento"
     ? periodoFechamento(hoje.getFullYear(), hoje.getMonth() + 1)
     : periodoMesCalendario(hoje.getFullYear(), hoje.getMonth() + 1);
@@ -220,6 +222,15 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
           }`}
         >
           Período de fechamento (20 a 19)
+        </button>
+        <button
+          type="button"
+          onClick={() => trocarTipo("ano")}
+          className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors ${
+            tipoPeriodo === "ano" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
+          }`}
+        >
+          Ano todo
         </button>
       </div>
 
