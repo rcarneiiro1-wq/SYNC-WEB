@@ -400,39 +400,44 @@ function intervaloEntreRdos(
 }
 
 export type FiltrosHistorico = {
-  colaborador?: string;
-  obra?: string;
+  // 27/11 (pedido do Rafael): um campo só de busca livre - nome do
+  // colaborador OU qualquer coisa da plataforma (nome, código, MD, GM) -
+  // em vez de "Colaborador" e "Obra/Plataforma" separados. Quem usa é
+  // leigo, não precisa adivinhar em qual caixa digitar o quê.
+  busca?: string;
   empresas?: string[]; // uma ou mais empresas (cards selecionáveis) - vazio/ausente = todas
   dataInicio?: string; // AAAA-MM-DD
   dataFim?: string; // AAAA-MM-DD
-  situacao?: "todos" | "concluido" | "pendencia";
 };
 
-/** Só os nomes distintos, pra popular os dropdowns de busca dos filtros -
- * uma query bem mais leve que a do histórico completo (só 2 colunas de
- * texto, sem juntar com RDOs), então é seguro rodar assim que a tela
- * de filtros abre, sem violar a ideia de "nada pesado antes do Buscar". */
-export async function buscarOpcoesFiltro(): Promise<{ colaboradores: string[]; obras: string[] }> {
+/** Só os textos distintos, pra popular o autocompletar do campo de busca -
+ * uma query bem mais leve que a do histórico completo, então é seguro
+ * rodar assim que a tela de filtros abre, sem violar a ideia de "nada
+ * pesado antes do Buscar".
+ *
+ * 27/11 (ajuste depois do Rafael reportar "ficou enorme a lista"): sugere
+ * só nome do colaborador + nome/código da plataforma - de propósito SEM
+ * os números de MD/GM (são strings compridas tipo
+ * "3010.2H-1223-94P-PHM-001", ninguém escolhe isso navegando uma lista,
+ * só faz sentido colar/digitar direto). A busca em si (`buscarEmbarquesFinalizados`)
+ * continua aceitando MD/GM digitado mesmo sem aparecer aqui. */
+export async function buscarOpcoesFiltro(): Promise<{ sugestoes: string[] }> {
   const [{ data, error }, { data: dataObras }] = await Promise.all([
-    supabase.from("embarques").select("efetivo_nome, obra_nome").eq("ativo", false),
-    // 27/11 (pedido do Rafael): sugere também o código da plataforma e os
-    // números de MD/GM cadastrados na obra, não só o nome do embarque - é
-    // exatamente o que ele pediu pra poder digitar na busca ("MV33",
-    // "MV-33", o número do MD/GM). O datalist é só um atalho de
-    // preenchimento; a busca em si (abaixo) já aceita qualquer um desses
-    // mesmo sem escolher da lista.
-    supabase.from("obras").select("nome, local_codigo, md_codigo, gm_codigo"),
+    supabase.from("embarques").select("efetivo_nome").eq("ativo", false),
+    supabase.from("obras").select("nome, local_codigo"),
   ]);
-  if (error || !data) return { colaboradores: [], obras: [] };
-  const colaboradores = Array.from(new Set(data.map((e) => e.efetivo_nome).filter((v): v is string => Boolean(v)))).sort();
-  const obrasTexto = [
-    ...data.map((e) => e.obra_nome),
-    ...((dataObras as unknown as { nome: string | null; local_codigo: string | null; md_codigo: string | null; gm_codigo: string | null }[]) || []).flatMap(
-      (o) => [o.nome, o.local_codigo, o.md_codigo, o.gm_codigo]
-    ),
+  if (error || !data) return { sugestoes: [] };
+  const textos = [
+    ...data.map((e) => e.efetivo_nome),
+    ...((dataObras as unknown as { nome: string | null; local_codigo: string | null }[]) || []).flatMap((o) => [
+      o.nome,
+      o.local_codigo,
+    ]),
   ];
-  const obras = Array.from(new Set(obrasTexto.filter((v): v is string => Boolean(v && v.trim())))).sort();
-  return { colaboradores, obras };
+  const sugestoes = Array.from(new Set(textos.filter((v): v is string => Boolean(v && v.trim())))).sort((a, b) =>
+    a.localeCompare(b, "pt-BR")
+  );
+  return { sugestoes };
 }
 
 /** Normaliza texto de busca livre pra comparação "tolerante": maiúsculo,
@@ -472,52 +477,6 @@ const COLUNAS_RDOS =
 
 export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {}): Promise<LinhaHistorico[]> {
   let query = supabase.from("embarques").select(COLUNAS_EMBARQUES).eq("ativo", false);
-  if (filtros.colaborador) query = query.ilike("efetivo_nome", `%${filtros.colaborador}%`);
-
-  if (filtros.obra) {
-    // 27/11 (pedido do Rafael, achado em produção): um ILIKE direto no
-    // `obra_nome` (texto snapshot do embarque) falhava em dois casos
-    // reais: 1) traço/maiúscula diferente - "mv33" não batia com "MV-33"
-    // por causa do traço no meio, e o pessoal que vai usar é leigo, não
-    // dá pra exigir digitar certinho; 2) o snapshot pode ter sido salvo
-    // ANTES da obra ganhar esse nome/código (achado de verdade: um
-    // embarque de set/2026 na plataforma "MV-33" tem `obra_nome` salvo só
-    // como "PCCS Piping Project", sem nenhum "MV33" - o nome mudou
-    // DEPOIS, mas o snapshot nunca se atualiza retroativamente, mesma
-    // regra de sempre, ver `efetivo_nome`). Por isso a busca agora resolve
-    // pela OBRA cadastrada (nome, código da plataforma, número do MD e do
-    // GM - os 4 jeitos que o Rafael pediu pra poder digitar), tudo
-    // normalizado (sem acento/maiúsculo/traço/espaço), e filtra pelo
-    // `obra_id` estável - que não muda mesmo se a obra for renomeada.
-    const buscaNormalizada = normalizarBusca(filtros.obra);
-    if (buscaNormalizada) {
-      const { data: obrasBusca } = await supabase
-        .from("obras")
-        .select("id::text, nome, local_codigo, md_codigo, gm_codigo");
-      const idsObraCombinando = (
-        (obrasBusca as unknown as {
-          id: string; nome: string | null; local_codigo: string | null; md_codigo: string | null; gm_codigo: string | null;
-        }[]) || []
-      )
-        .filter((o) =>
-          [o.nome, o.local_codigo, o.md_codigo, o.gm_codigo].some(
-            (campo) => campo && normalizarBusca(campo).includes(buscaNormalizada)
-          )
-        )
-        .map((o) => o.id);
-
-      // achou pelo menos 1 obra cadastrada batendo -> filtra pelo id
-      // (estável). Não achou nenhuma -> mantém o ILIKE de texto como
-      // fallback, pra não quebrar busca livre que não corresponda a
-      // nenhuma obra cadastrada.
-      query = idsObraCombinando.length > 0
-        ? query.in("obra_id", idsObraCombinando)
-        : query.ilike("obra_nome", `%${filtros.obra}%`);
-    } else {
-      query = query.ilike("obra_nome", `%${filtros.obra}%`);
-    }
-  }
-
   if (filtros.dataInicio) query = query.gte("data_inicio", filtros.dataInicio);
   if (filtros.dataFim) query = query.lte("data_fim", filtros.dataFim);
   query = query.order("data_inicio", { ascending: false });
@@ -590,23 +549,37 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
     };
   });
 
-  // "situação" depende do pendentes calculado acima, não dá pra filtrar
-  // isso direto na query do Supabase - mas nesse ponto o conjunto já foi
-  // reduzido pelos outros filtros (colaborador/obra/data), então filtrar
-  // em memória aqui é barato.
-  // Considera as DUAS fontes de pendência: o status_final gravado no
-  // encerramento (a informação de verdade, quando existe) e o gap de
-  // dias-sem-RDO calculado (fallback pra embarques antigos, sem essa
-  // informação ainda).
-  const temPendencia = (l: LinhaHistorico) => l.embarque.status_final === "com_pendencia" || l.pendentes > 0;
+  // 27/11 (pedido do Rafael): campo de busca único (nome do colaborador OU
+  // qualquer coisa da plataforma - nome, código, MD, GM), filtrado em
+  // memória - mesmo motivo de sempre (empresa, logo abaixo): não dá pra
+  // expressar "bate o nome OU bate a plataforma, com tudo normalizado"
+  // numa query só do Supabase, e nesse ponto o conjunto já foi reduzido
+  // pelo período (De/Até), então filtrar aqui é barato pro volume de
+  // embarques finalizados de hoje (e dos próximos tempos - se um dia isso
+  // virar milhares de linhas por período, aí sim vale revisar pra filtrar
+  // direto no banco).
+  //
+  // Importante: usa a OBRA ATUAL de cada linha (`l.obra`, já buscada do
+  // cadastro acima), não o texto `obra_nome` congelado no embarque -
+  // resolve o mesmo problema do "2 Gustavos" pra plataforma: o nome do
+  // embarque pode ter sido salvo ANTES da obra ganhar esse nome/código
+  // (achado de verdade: um embarque de set/2026 na "MV-33" tem o nome
+  // congelado só como "PCCS Piping Project", sem nenhum "MV33" - batendo
+  // na obra atual, a busca encontra mesmo assim).
   let resultado = linhas;
-  if (filtros.situacao === "concluido") resultado = resultado.filter((l) => !temPendencia(l));
-  if (filtros.situacao === "pendencia") resultado = resultado.filter((l) => temPendencia(l));
+  if (filtros.busca) {
+    const buscaNormalizada = normalizarBusca(filtros.busca);
+    if (buscaNormalizada) {
+      resultado = resultado.filter((l) => {
+        const campos = [l.embarque.efetivo_nome, l.obra?.nome, l.obra?.local_codigo, l.obra?.md_codigo, l.obra?.gm_codigo];
+        return campos.some((campo) => campo && normalizarBusca(campo).includes(buscaNormalizada));
+      });
+    }
+  }
 
-  // empresa também é filtrada em memória, mesmo motivo da "situação" -
-  // não tem chave estrangeira configurada entre embarques/obras pro
-  // Supabase filtrar isso direto na query (ver embarques.ts/admin.ts),
-  // e nesse ponto o conjunto já está pequeno o bastante pra não pesar.
+  // empresa também é filtrada em memória, mesmo motivo acima - não tem
+  // chave estrangeira configurada entre embarques/obras pro Supabase
+  // filtrar isso direto na query (ver embarques.ts/admin.ts).
   if (filtros.empresas && filtros.empresas.length > 0) {
     const selecionadas = new Set(filtros.empresas);
     resultado = resultado.filter((l) => l.obra?.empresa && selecionadas.has(l.obra.empresa));
