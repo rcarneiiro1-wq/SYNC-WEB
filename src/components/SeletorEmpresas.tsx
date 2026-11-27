@@ -15,7 +15,12 @@ const PALETA = [
   { bg: "#E0F7F5", fg: "#0f9488" }, // teal
 ];
 
-function corDaEmpresa(nome: string): { bg: string; fg: string } {
+/** Exportada (27/11) pra a "Visão geral" do Relatório por empresa colorir
+ * gráficos/legendas com a MESMA cor que o card da empresa já usa aqui -
+ * evita inventar uma paleta nova e deixa a cor da empresa consistente em
+ * toda a tela, e já escala sozinha pra quantas empresas forem cadastradas
+ * (6 cores cíclicas, determinísticas pelo nome). */
+export function corDaEmpresa(nome: string): { bg: string; fg: string } {
   let soma = 0;
   for (let i = 0; i < nome.length; i++) soma += nome.charCodeAt(i);
   return PALETA[soma % PALETA.length];
