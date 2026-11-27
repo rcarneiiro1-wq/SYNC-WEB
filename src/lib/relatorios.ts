@@ -36,9 +36,25 @@ export function periodoFechamento(ano: number, mes: number): Periodo {
   };
 }
 
-/** Anda um período pra frente ou pra trás (±1 mês), preservando se é
- * calendário ou fechamento. */
-export function periodoAdjacente(periodo: Periodo, tipo: "calendario" | "fechamento", direcao: 1 | -1): Periodo {
+/** Ano calendário inteiro: 1º de janeiro a 31 de dezembro. Pra enxergar o
+ * ano todo de uma vez (ex: "quais empresas me deram mais trabalho esse
+ * ano") sem ficar preso mês a mês - pedido do Rafael em 27/11, de olho
+ * na conversa com o Fabiano. Reaproveita o mesmo `Periodo` (inicio/fim)
+ * que o resto do relatório já entende, então não precisou mexer em mais
+ * nada pra "ano" funcionar - só em como ele é montado e navegado. */
+export function periodoAnoCalendario(ano: number): Periodo {
+  return { inicio: `${ano}-01-01`, fim: `${ano}-12-31`, rotulo: `${ano}` };
+}
+
+/** Anda um período pra frente ou pra trás (±1 mês, ou ±1 ano pro tipo
+ * "ano"), preservando o tipo (calendário, fechamento ou ano). */
+export function periodoAdjacente(
+  periodo: Periodo, tipo: "calendario" | "fechamento" | "ano", direcao: 1 | -1
+): Periodo {
+  if (tipo === "ano") {
+    const anoAtual = Number(periodo.inicio.slice(0, 4));
+    return periodoAnoCalendario(anoAtual + direcao);
+  }
   const [ano, mes] = periodo.fim.slice(0, 7).split("-").map(Number);
   let novoMes = mes + direcao;
   let novoAno = ano;
