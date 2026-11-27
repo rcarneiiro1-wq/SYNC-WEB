@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Users, Ship, Calendar, Clock, Trophy, CheckCircle2, Info } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Users, Ship, Calendar, Clock, Trophy, CheckCircle2, Info, Home } from "lucide-react";
 import {
   buscarComparativoColaboradores,
   gerarInsightsComparativo,
@@ -219,6 +219,11 @@ export function ComparativoColaboradoresConteudo({ colaboradoresCadastrados }: {
   // vazio = mostra todo mundo - só filtra de verdade quando a pessoa
   // escolher alguém no seletor (mesma convenção do Relatório por empresa)
   const [colaboradoresSelecionados, setColaboradoresSelecionados] = useState<Set<string>>(new Set());
+  // Pedido da Andreia via Rafael (27/11): atalho rápido pra ver só quem
+  // está de folga agora, sem precisar abrir "Embarques ativos" e cruzar
+  // mentalmente quem NÃO tá na lista. Combina com o seletor de colaborador
+  // acima (ex: filtrar 3 pessoas específicas E só as que estão de folga).
+  const [somenteFolga, setSomenteFolga] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de loading/erro ao trocar de período, antes de disparar a busca
@@ -243,23 +248,22 @@ export function ComparativoColaboradoresConteudo({ colaboradoresCadastrados }: {
     setPeriodo((atual) => periodoAdjacente(atual, tipoPeriodo, direcao));
   };
 
-  const linhasFiltradas = useMemo(
-    () =>
-      colaboradoresSelecionados.size === 0
-        ? linhas
-        : linhas.filter((l) => colaboradoresSelecionados.has(l.colaboradorId)),
-    [linhas, colaboradoresSelecionados]
+  // Seletor de colaborador + o toggle "só quem tá de folga" combinam -
+  // mesma função pra aplicar nos dois períodos (atual e anterior), pra
+  // nunca os dois recortes divergirem por engano.
+  const aplicarFiltros = useCallback(
+    (lista: LinhaComparativoColaborador[]): LinhaComparativoColaborador[] => {
+      const base = colaboradoresSelecionados.size === 0 ? lista : lista.filter((l) => colaboradoresSelecionados.has(l.colaboradorId));
+      return somenteFolga ? base.filter((l) => !l.embarcadoAgora) : base;
+    },
+    [colaboradoresSelecionados, somenteFolga]
   );
 
-  // mesmo recorte de colaboradores aplicado ao período anterior, pra
-  // comparar maçã com maçã quando a pessoa tiver filtrado alguém específico
-  const linhasAnterioresFiltradas = useMemo(
-    () =>
-      colaboradoresSelecionados.size === 0
-        ? linhasAnteriores
-        : linhasAnteriores.filter((l) => colaboradoresSelecionados.has(l.colaboradorId)),
-    [linhasAnteriores, colaboradoresSelecionados]
-  );
+  const linhasFiltradas = useMemo(() => aplicarFiltros(linhas), [linhas, aplicarFiltros]);
+
+  // mesmo recorte aplicado ao período anterior, pra comparar maçã com
+  // maçã quando a pessoa tiver filtrado alguém específico e/ou "de folga"
+  const linhasAnterioresFiltradas = useMemo(() => aplicarFiltros(linhasAnteriores), [linhasAnteriores, aplicarFiltros]);
 
   const totalEmbarques = linhasFiltradas.reduce((s, l) => s + l.numeroEmbarques, 0);
   const totalDiarias = linhasFiltradas.reduce((s, l) => s + l.totalDiarias, 0);
@@ -300,6 +304,15 @@ export function ComparativoColaboradoresConteudo({ colaboradoresCadastrados }: {
             selecionados={colaboradoresSelecionados}
             aoMudar={setColaboradoresSelecionados}
           />
+          <button
+            type="button"
+            onClick={() => setSomenteFolga((v) => !v)}
+            className={`flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-md border transition-colors whitespace-nowrap ${
+              somenteFolga ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
+            }`}
+          >
+            <Home size={14} /> Apenas de folga
+          </button>
           <div className="flex gap-1.5">
             <button
               type="button"
@@ -491,19 +504,24 @@ export function ComparativoColaboradoresConteudo({ colaboradoresCadastrados }: {
                 <Users size={16} className="text-navy" /> Disponibilidade operacional
               </h3>
               <div className="flex flex-col gap-4">
-                <div className="flex items-start gap-2.5">
-                  <span className="w-7 h-7 rounded-full bg-verde/10 text-verde flex items-center justify-center shrink-0">
-                    <CheckCircle2 size={15} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-navy">
-                      {embarcados.length} colaborador{embarcados.length === 1 ? "" : "es"} embarcado{embarcados.length === 1 ? "" : "s"}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {embarcados.length > 0 ? listarNomes(embarcados.map((l) => capitalizar(l.nome))) : "Ninguém embarcado no momento"}
-                    </p>
+                {/* Escondido com o toggle "Apenas de folga" ligado - não faz
+                 * sentido mostrar "0 colaboradores embarcados" quando a
+                 * pessoa pediu pra ver só quem NÃO tá embarcado. */}
+                {!somenteFolga && (
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-7 h-7 rounded-full bg-verde/10 text-verde flex items-center justify-center shrink-0">
+                      <CheckCircle2 size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-navy">
+                        {embarcados.length} colaborador{embarcados.length === 1 ? "" : "es"} embarcado{embarcados.length === 1 ? "" : "s"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {embarcados.length > 0 ? listarNomes(embarcados.map((l) => capitalizar(l.nome))) : "Ninguém embarcado no momento"}
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
                 {parados.length > 0 && (
                   <div className="flex items-start gap-2.5">
                     <span className="w-7 h-7 rounded-full bg-amarelo/10 text-amarelo flex items-center justify-center shrink-0">
@@ -523,6 +541,9 @@ export function ComparativoColaboradoresConteudo({ colaboradoresCadastrados }: {
                       </div>
                     </div>
                   </div>
+                )}
+                {somenteFolga && parados.length === 0 && (
+                  <p className="text-xs text-gray-400">Ninguém de folga no momento - todo mundo embarcado.</p>
                 )}
               </div>
             </div>
