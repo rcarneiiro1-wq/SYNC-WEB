@@ -568,11 +568,20 @@ export async function buscarEmbarquesFinalizados(filtros: FiltrosHistorico = {})
   // na obra atual, a busca encontra mesmo assim).
   let resultado = linhas;
   if (filtros.busca) {
-    const buscaNormalizada = normalizarBusca(filtros.busca);
-    if (buscaNormalizada) {
+    // 27/11 (pedido do Rafael, achado por ele mesmo testando): digitar
+    // "rafael p75" (nome + plataforma juntos, pra afunilar o resultado
+    // quando uma pessoa já teve vários embarques) não achava nada - o
+    // campo único comparava a frase INTEIRA contra cada campo, e nenhum
+    // campo sozinho contém "rafael" e "p75" colados. Separa a busca em
+    // PALAVRAS (por espaço) e exige que CADA palavra bata em ALGUM campo
+    // (não precisa ser o mesmo campo) - assim "rafael" bate no nome e
+    // "p75" bate no código da plataforma, linha por linha.
+    const palavras = filtros.busca.split(/\s+/).map(normalizarBusca).filter(Boolean);
+    if (palavras.length > 0) {
       resultado = resultado.filter((l) => {
         const campos = [l.embarque.efetivo_nome, l.obra?.nome, l.obra?.local_codigo, l.obra?.md_codigo, l.obra?.gm_codigo];
-        return campos.some((campo) => campo && normalizarBusca(campo).includes(buscaNormalizada));
+        const camposNormalizados = campos.filter((c): c is string => Boolean(c)).map(normalizarBusca);
+        return palavras.every((palavra) => camposNormalizados.some((campo) => campo.includes(palavra)));
       });
     }
   }
