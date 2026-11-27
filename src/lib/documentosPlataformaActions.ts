@@ -120,6 +120,11 @@ export async function confirmarUploadDocumentoPlataforma(dados: {
   caminhoNoBucket: string;
   nomeArquivo: string;
   tamanhoBytes: number;
+  // 27/11: observação livre opcional (pedido do Rafael) - digitada no
+  // momento do upload, pra já nascer identificado (ex: "MD de escaneamento
+  // de linhas"). String vazia é tratada como "sem observação" (null), não
+  // grava "" no banco.
+  observacao?: string | null;
 }): Promise<ResultadoDocumento> {
   const nomeUsuario = await usuarioComPermissao();
   if (!nomeUsuario) {
@@ -138,6 +143,8 @@ export async function confirmarUploadDocumentoPlataforma(dados: {
     return { sucesso: false, erro: "Categoria inválida." };
   }
 
+  const observacao = dados.observacao?.trim() || null;
+
   const admin = criarClienteAdmin();
   const { error: erroInsert } = await admin.from("documentos_plataforma").insert({
     id: dados.documentoId,
@@ -147,6 +154,7 @@ export async function confirmarUploadDocumentoPlataforma(dados: {
     caminho_storage: dados.caminhoNoBucket,
     tamanho_bytes: dados.tamanhoBytes,
     enviado_por: nomeUsuario,
+    observacao,
   });
   if (erroInsert) {
     // melhor esforço: se o registro falhar, remove o arquivo órfão do
@@ -183,6 +191,34 @@ export async function removerDocumentoPlataforma(documentoId: string): Promise<R
   const { error: erroDelete } = await admin.from("documentos_plataforma").delete().eq("id", documentoId);
   if (erroDelete) {
     return { sucesso: false, erro: `Não consegui remover: ${erroDelete.message}` };
+  }
+  return { sucesso: true };
+}
+
+/** 27/11 (pedido do Rafael): adiciona/edita a observação de um documento já
+ * enviado - cobre o caso dele mesmo ("já estive aqui há 30 dias, só não
+ * subi o MD") de querer identificar um documento antigo que subiu sem
+ * nota nenhuma, sem precisar reenviar o arquivo. String vazia limpa a
+ * observação (volta pra null). */
+export async function atualizarObservacaoDocumentoPlataforma(
+  documentoId: string,
+  observacao: string
+): Promise<ResultadoDocumento> {
+  const nomeUsuario = await usuarioComPermissao();
+  if (!nomeUsuario) {
+    return { sucesso: false, erro: "Você não tem acesso a essa área, ou sua sessão expirou." };
+  }
+  if (!documentoId) {
+    return { sucesso: false, erro: "Documento não identificado." };
+  }
+
+  const admin = criarClienteAdmin();
+  const { error } = await admin
+    .from("documentos_plataforma")
+    .update({ observacao: observacao.trim() || null })
+    .eq("id", documentoId);
+  if (error) {
+    return { sucesso: false, erro: `Não consegui salvar a observação: ${error.message}` };
   }
   return { sucesso: true };
 }
