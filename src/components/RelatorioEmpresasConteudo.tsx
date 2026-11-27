@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Ship, Calendar, Users, Clock, TrendingUp } from "lucide-react";
+import { Ship, Calendar, Users, Clock, TrendingUp, Activity, CheckCircle2, AlertTriangle, Info } from "lucide-react";
 import {
   buscarRelatorioPorEmpresa,
   buscarEvolucaoMensal,
@@ -59,24 +59,144 @@ function corPrincipalEmpresa(nome: string): string {
   return PALETA_FALLBACK[soma % PALETA_FALLBACK.length];
 }
 
-/** "Bom" quando não tem nenhuma pendência em aberto; "Atenção" quando tem
- * pelo menos 1 - independente do % de avanço (um embarque pode estar com
- * 100% de avanço e MESMO ASSIM ter sido encerrado com pendência por outro
- * motivo administrativo, ver caso real do Eduardo/Hydra em 27/11). */
-function saudeDaLinha(linha: LinhaRelatorioEmpresa): { rotulo: string; classe: "bom" | "atencao" } {
-  return linha.comPendencia > 0 ? { rotulo: "Atenção", classe: "atencao" } : { rotulo: "Bom", classe: "bom" };
+/** Classificação objetiva da saúde de uma empresa, em 3 níveis - baseada
+ * só nos campos que já existem (completos/comPendencia), sem inventar
+ * critério novo nem precisar de dado novo (pedido explícito do Rafael,
+ * 27/11):
+ * - sem nenhum embarque finalizado ainda (só ativos), ou 0 pendências
+ *   entre os finalizados -> saudável
+ * - pendências são MENOS da metade dos embarques já finalizados -> atenção
+ * - pendências são METADE OU MAIS dos finalizados -> crítica
+ * ("Finalizado" = completo ou com_pendencia; ativos não entram nessa
+ * conta porque ainda não tiveram chance de dar problema). */
+function classificarSaude(linha: LinhaRelatorioEmpresa): { classe: "saudavel" | "atencao" | "critica" } {
+  const finalizados = linha.completos + linha.comPendencia;
+  if (finalizados === 0 || linha.comPendencia === 0) return { classe: "saudavel" };
+  const taxaPendencia = linha.comPendencia / finalizados;
+  return { classe: taxaPendencia >= 0.5 ? "critica" : "atencao" };
 }
 
+const ROTULO_BADGE_CURTO = { saudavel: "Bom", atencao: "Atenção", critica: "Crítico" } as const;
+const ICONE_BADGE = { saudavel: "✓", atencao: "⚠", critica: "✕" } as const;
+const CLASSE_BADGE = {
+  saudavel: "text-verde bg-verde/10",
+  atencao: "text-amarelo bg-amarelo/10",
+  critica: "text-vermelho bg-vermelho/10",
+} as const;
+
 function BadgeSaude({ linha }: { linha: LinhaRelatorioEmpresa }) {
-  const saude = saudeDaLinha(linha);
-  return saude.classe === "bom" ? (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-verde bg-verde/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-      ✓ Bom
+  const saude = classificarSaude(linha);
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${CLASSE_BADGE[saude.classe]}`}>
+      {ICONE_BADGE[saude.classe]} {ROTULO_BADGE_CURTO[saude.classe]}
     </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amarelo bg-amarelo/10 px-2 py-0.5 rounded-full whitespace-nowrap">
-      ⚠ Atenção
-    </span>
+  );
+}
+
+/** Frase dinâmica do rodapé do card de saúde - gerada por regra simples
+ * em cima dos mesmos campos, sem IA (pedido do Rafael, 27/11). */
+function fraseStatusSaude(linha: LinhaRelatorioEmpresa): string {
+  if (linha.comPendencia > 0) {
+    return linha.comPendencia > 1
+      ? `${linha.comPendencia} embarques com pendência precisam de atenção.`
+      : "1 embarque com pendência precisa de atenção.";
+  }
+  if (linha.ativos > 0) {
+    return linha.ativos > 1
+      ? `${linha.ativos} embarques ainda estão em andamento.`
+      : "1 embarque ainda está em andamento.";
+  }
+  return "Todos os embarques do período foram concluídos.";
+}
+
+const BADGE_SAUDE_LONGO = {
+  saudavel: { label: "Operação saudável", classe: "bg-verde/10 text-verde" },
+  atencao: { label: "Atenção", classe: "bg-amarelo/10 text-amarelo" },
+  critica: { label: "Situação crítica", classe: "bg-vermelho/10 text-vermelho" },
+} as const;
+
+/** Card rico de "Saúde da execução" por empresa - redesenhado em 27/11 a
+ * pedido do Rafael (prompt + imagem de referência), no lugar do bloco
+ * mais enxuto de antes. Usa só campos que já existem em
+ * LinhaRelatorioEmpresa (completos/comPendencia/ativos/numeroEmbarques) -
+ * nenhum dado novo, nenhuma consulta nova. */
+function CardSaudeEmpresa({ linha }: { linha: LinhaRelatorioEmpresa }) {
+  const saude = classificarSaude(linha);
+  const badge = BADGE_SAUDE_LONGO[saude.classe];
+  const taxaConclusao = linha.numeroEmbarques > 0 ? Math.round((linha.completos / linha.numeroEmbarques) * 100) : 0;
+  const cor = corPrincipalEmpresa(linha.empresa);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 min-w-0">
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#E3F2FD", color: "#1E88E5" }}>
+            <Activity size={18} />
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-navy">Saúde da execução (qualidade)</h3>
+            <p className="text-xs text-gray-400 flex items-center gap-1.5 capitalize truncate">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />
+              {linha.empresa} · {linha.numeroEmbarques} embarque{linha.numeroEmbarques === 1 ? "" : "s"}
+            </p>
+          </div>
+        </div>
+        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 ${badge.classe}`}>
+          ● {badge.label}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-6 mb-4">
+        <DonutChart
+          tamanho={104}
+          espessura={14}
+          segmentos={[
+            { empresa: "concluidos", valor: linha.completos, cor: "#639922" },
+            { empresa: "resto", valor: Math.max(linha.numeroEmbarques - linha.completos, 0), cor: "#e8ecf1" },
+          ]}
+          rotuloCentro={`${taxaConclusao}%`}
+          legendaCentro="conclusão"
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-2xl font-extrabold text-navy leading-tight">
+            {linha.completos} <span className="text-sm font-medium text-gray-400">de {linha.numeroEmbarques}</span>
+          </p>
+          <p className="text-xs text-gray-400 mb-2">Embarques concluídos</p>
+          <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div className="h-full rounded-full bg-verde" style={{ width: `${taxaConclusao}%` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2.5 mb-4">
+        <div className="rounded-lg px-3 py-2.5 bg-verde/10">
+          <div className="flex items-center gap-1.5 text-verde mb-1">
+            <CheckCircle2 size={14} />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Concluídos</span>
+          </div>
+          <p className="text-lg font-extrabold text-navy">{linha.completos}</p>
+        </div>
+        <div className="rounded-lg px-3 py-2.5 bg-azul/10">
+          <div className="flex items-center gap-1.5 text-azul mb-1">
+            <Clock size={14} />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Em andamento</span>
+          </div>
+          <p className="text-lg font-extrabold text-navy">{linha.ativos}</p>
+        </div>
+        <div className="rounded-lg px-3 py-2.5 bg-amarelo/10">
+          <div className="flex items-center gap-1.5 text-amarelo mb-1">
+            <AlertTriangle size={14} />
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Pendências</span>
+          </div>
+          <p className="text-lg font-extrabold text-navy">{linha.comPendencia}</p>
+        </div>
+      </div>
+
+      <div className="pt-3 border-t border-gray-100 flex items-center gap-1.5 text-xs text-gray-500">
+        <Info size={13} className="text-gray-400 shrink-0" />
+        {fraseStatusSaude(linha)}
+      </div>
+    </div>
   );
 }
 
@@ -267,6 +387,7 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
   // de verdade quando a pessoa clica em pelo menos um card
   const [empresasSelecionadas, setEmpresasSelecionadas] = useState<Set<string>>(new Set());
   const [metricaParticipacao, setMetricaParticipacao] = useState<MetricaParticipacao>("embarques");
+  const [metricaEvolucao, setMetricaEvolucao] = useState<MetricaParticipacao>("embarques");
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset de loading/erro ao trocar de período, antes de disparar a busca
@@ -323,31 +444,39 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
 
   const mostrarParticipacao = linhasFiltradas.length >= 2;
 
-  // só mostra, no gráfico, os meses entre o primeiro e o último que
-  // tiveram alguma diária - recorta os meses vazios das pontas (ex: não
-  // faz sentido desenhar Jan-Jul em branco se a operação só começou em
-  // Ago), mas preserva um "buraco" no meio se alguma empresa parou de
-  // operar por um mês e voltou depois (isso É informação).
-  const evolucaoExibida = useMemo(() => {
-    const indicesComDado = evolucaoFiltrada
-      .map((p, i) => (Object.values(p.porEmpresa).some((v) => v.diarias > 0) ? i : -1))
-      .filter((i) => i >= 0);
-    if (indicesComDado.length === 0) return [];
-    return evolucaoFiltrada.slice(indicesComDado[0], indicesComDado[indicesComDado.length - 1] + 1);
-  }, [evolucaoFiltrada]);
-
-  const mostrarEvolucao = evolucaoExibida.length >= 2;
-  const numPaineis = [mostrarParticipacao, mostrarEvolucao, true].filter(Boolean).length;
+  // 27/11: mostra TODOS os meses do período (ex: Jan a Dez inteiro no "Ano
+  // todo"), mesmo os sem embarque - antes recortava os meses vazios das
+  // pontas, mas o Rafael pediu pra manter o ano completo visível, já de
+  // olho no crescimento da operação (hoje tem poucos embarques, mas a
+  // ideia é ver o ano todo preenchendo aos poucos).
+  const mostrarEvolucao = evolucaoFiltrada.length >= 2;
+  const numPaineis = [mostrarParticipacao, mostrarEvolucao].filter(Boolean).length;
 
   const totalParticipacao = linhasFiltradas.reduce(
     (s, l) => s + (metricaParticipacao === "embarques" ? l.numeroEmbarques : l.totalDiarias), 0
   );
-  const totalDiariasParticipacao = totalDiarias; // card do rodapé é sempre por diárias, sem alternância
 
   const maiorValorEvolucao = Math.max(
     1,
-    ...evolucaoExibida.flatMap((p) => Object.values(p.porEmpresa).map((v) => v.diarias))
+    ...evolucaoFiltrada.flatMap((p) => Object.values(p.porEmpresa).map((v) => v[metricaEvolucao === "embarques" ? "embarques" : "diarias"]))
   );
+
+  // linha "fantasma" (decorativa) atrás das barras da evolução - soma de
+  // todas as empresas visíveis por mês, normalizada em % (0-100) pra virar
+  // coordenada de SVG com viewBox 0 0 100 100. Puramente visual, não é
+  // informação nova (pedido do Rafael: "fica bonito").
+  const pontosFantasma = useMemo(() => {
+    if (evolucaoFiltrada.length < 2) return "";
+    const n = evolucaoFiltrada.length;
+    return evolucaoFiltrada
+      .map((ponto, i) => {
+        const total = Object.values(ponto.porEmpresa).reduce((s, v) => s + v[metricaEvolucao === "embarques" ? "embarques" : "diarias"], 0);
+        const x = (i / (n - 1)) * 100;
+        const y = 100 - Math.min((total / maiorValorEvolucao) * 100, 100);
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [evolucaoFiltrada, metricaEvolucao, maiorValorEvolucao]);
 
   return (
     <>
@@ -485,7 +614,8 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
             </div>
           </div>
 
-          {/* Participação · Evolução mensal · Saúde da execução */}
+          {/* Participação · Evolução mensal */}
+          {(mostrarParticipacao || mostrarEvolucao) && (
           <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: `repeat(${numPaineis}, minmax(0, 1fr))` }}>
             {mostrarParticipacao && (
               <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
@@ -539,75 +669,90 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
 
             {mostrarEvolucao && (
               <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-navy">Evolução de embarques por mês</h3>
-                  <div className="flex gap-3 text-[11px] text-gray-500">
-                    {linhasFiltradas.map((linha) => (
-                      <span key={linha.empresa} className="flex items-center gap-1 capitalize">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
-                        {linha.empresa}
-                      </span>
-                    ))}
+                <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                  <h3 className="text-sm font-bold text-navy">
+                    Evolução de {metricaEvolucao === "embarques" ? "embarques" : "diárias"} por mês
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-3 text-[11px] text-gray-500">
+                      {linhasFiltradas.map((linha) => (
+                        <span key={linha.empresa} className="flex items-center gap-1 capitalize">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
+                          {linha.empresa}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-0.5 bg-gray-100 rounded-md p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setMetricaEvolucao("embarques")}
+                        className={`text-[11px] font-semibold px-2 py-1 rounded ${metricaEvolucao === "embarques" ? "bg-azul text-white" : "text-gray-500"}`}
+                      >
+                        Embarques
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMetricaEvolucao("diarias")}
+                        className={`text-[11px] font-semibold px-2 py-1 rounded ${metricaEvolucao === "diarias" ? "bg-azul text-white" : "text-gray-500"}`}
+                      >
+                        Diárias
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="flex items-end gap-3 h-[150px] min-w-max px-0.5">
-                    {evolucaoExibida.map((ponto) => (
-                      <div key={ponto.mes} className="shrink-0 flex flex-col items-center justify-end h-full gap-1">
-                        <div className="flex items-end gap-1 h-full">
-                          {linhasFiltradas.map((linha) => {
-                            const valor = ponto.porEmpresa[linha.empresa]?.diarias ?? 0;
-                            const alturaPct = (valor / maiorValorEvolucao) * 100;
-                            return (
-                              <div key={linha.empresa} className="flex flex-col items-center justify-end h-full w-5 shrink-0">
-                                {valor > 0 && <span className="text-[10px] font-bold text-gray-500 mb-0.5">{valor}</span>}
-                                <div
-                                  title={`${capitalizar(linha.empresa)} — ${ponto.rotulo}: ${valor} diárias`}
-                                  className="w-full rounded-t-sm transition-opacity hover:opacity-80"
-                                  style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }}
-                                />
-                              </div>
-                            );
-                          })}
+                  <div className="relative min-w-max px-0.5">
+                    {/* linha fantasma decorativa (soma de todas as empresas visíveis), atrás das barras */}
+                    {pontosFantasma && (
+                      <svg className="absolute inset-0 w-full h-[150px] pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="ghostFade" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3D6FA6" stopOpacity="0.16" />
+                            <stop offset="100%" stopColor="#3D6FA6" stopOpacity="0" />
+                          </linearGradient>
+                        </defs>
+                        <polygon points={`0,100 ${pontosFantasma} 100,100`} fill="url(#ghostFade)" />
+                        <polyline points={pontosFantasma} fill="none" stroke="#3D6FA6" strokeOpacity="0.4" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
+                      </svg>
+                    )}
+                    <div className="relative flex items-end gap-3 h-[150px]">
+                      {evolucaoFiltrada.map((ponto) => (
+                        <div key={ponto.mes} className="shrink-0 flex flex-col items-center justify-end h-full gap-1">
+                          <div className="flex items-end gap-1 h-full">
+                            {linhasFiltradas.map((linha) => {
+                              const valor = ponto.porEmpresa[linha.empresa]?.[metricaEvolucao] ?? 0;
+                              const alturaPct = (valor / maiorValorEvolucao) * 100;
+                              return (
+                                <div key={linha.empresa} className="flex flex-col items-center justify-end h-full w-5 shrink-0">
+                                  {valor > 0 && <span className="text-[10px] font-bold text-gray-500 mb-0.5">{valor}</span>}
+                                  <div
+                                    title={`${capitalizar(linha.empresa)} — ${ponto.rotulo}: ${valor} ${metricaEvolucao === "embarques" ? "embarque(s)" : "diária(s)"}`}
+                                    className="w-full rounded-t-sm transition-opacity hover:opacity-80"
+                                    style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">{ponto.rotulo.split("/")[0]}</span>
                         </div>
-                        <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">{ponto.rotulo.split("/")[0]}</span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
             )}
+          </div>
+          )}
 
-            <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
-              <h3 className="text-sm font-bold text-navy mb-3">Saúde da execução (qualidade)</h3>
-              <div className="flex flex-col gap-3.5">
-                {linhasFiltradas.map((linha) => {
-                  return (
-                    <div key={linha.empresa}>
-                      <div className="flex items-center justify-between text-xs font-bold text-navy mb-1.5">
-                        <span className="flex items-center gap-1.5 capitalize">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
-                          {linha.empresa}
-                          <span className="font-normal text-gray-400 normal-case">
-                            · {linha.numeroEmbarques} embarque{linha.numeroEmbarques === 1 ? "" : "s"}
-                          </span>
-                        </span>
-                        <span>{linha.percentualMedio !== null ? `${linha.percentualMedio}%` : "-"}</span>
-                      </div>
-                      <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden mb-1.5">
-                        <div className="h-full rounded-full bg-verde" style={{ width: `${linha.percentualMedio ?? 0}%` }} />
-                      </div>
-                      <div className="flex gap-2.5 flex-wrap text-[10.5px] text-gray-400 mb-1.5">
-                        {linha.completos > 0 && <span>✓ {linha.completos} completo{linha.completos === 1 ? "" : "s"}</span>}
-                        {linha.comPendencia > 0 && <span>⚠ {linha.comPendencia} com pendência</span>}
-                        {linha.ativos > 0 && <span>● {linha.ativos} em andamento</span>}
-                      </div>
-                      <BadgeSaude linha={linha} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Saúde da execução - um card rico por empresa (redesenhado 27/11) */}
+          <div
+            className="grid gap-4 mb-5"
+            style={{ gridTemplateColumns: linhasFiltradas.length >= 2 ? "repeat(auto-fit, minmax(360px, 1fr))" : "1fr" }}
+          >
+            {linhasFiltradas.map((linha) => (
+              <CardSaudeEmpresa key={linha.empresa} linha={linha} />
+            ))}
           </div>
 
           {/* Comparativo por empresa · Principais insights */}
@@ -665,61 +810,10 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
             </div>
           </div>
 
-          {/* Diárias por empresa · Participação de diárias (sempre por diárias, sem alternância) */}
-          <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)" }}>
-            <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
-              <h3 className="text-sm font-bold text-navy mb-4">Diárias por empresa</h3>
-              <div className="flex flex-col gap-4">
-                {linhasFiltradas.map((linha) => {
-                  const pct = totalDiariasParticipacao > 0
-                    ? Math.round((linha.totalDiarias / totalDiariasParticipacao) * 1000) / 10
-                    : 0;
-                  const propor = maiorDiarias > 0 ? (linha.totalDiarias / maiorDiarias) * 100 : 0;
-                  return (
-                    <div key={linha.empresa}>
-                      <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="flex items-center gap-1.5 font-semibold text-navy capitalize">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
-                          {linha.empresa}
-                        </span>
-                        <span className="text-gray-500">{linha.totalDiarias} diárias · {pct}%</span>
-                      </div>
-                      <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${propor}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col items-center justify-center min-w-0">
-              <h3 className="text-sm font-bold text-navy mb-3 self-start">Participação de diárias</h3>
-              <DonutChart
-                tamanho={132}
-                espessura={18}
-                segmentos={linhasFiltradas.map((l) => ({ empresa: l.empresa, valor: l.totalDiarias, cor: corPrincipalEmpresa(l.empresa) }))}
-                rotuloCentro={String(totalDiariasParticipacao)}
-                legendaCentro="diárias"
-              />
-              <div className="flex flex-col gap-1.5 mt-3 w-full">
-                {linhasFiltradas.map((linha) => {
-                  const pct = totalDiariasParticipacao > 0
-                    ? Math.round((linha.totalDiarias / totalDiariasParticipacao) * 1000) / 10
-                    : 0;
-                  return (
-                    <div key={linha.empresa} className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 font-semibold text-navy capitalize">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
-                        {linha.empresa}
-                      </span>
-                      <span className="text-gray-500">{pct}%</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+          {/* Diárias por empresa / Participação de diárias foram removidos em 27/11 - o
+           * Rafael apontou que duplicavam a mesma informação do donut "Participação no
+           * período" (que já tem o toggle Embarques/Diárias) e da coluna Diárias da
+           * tabela comparativa. */}
 
           {/* Financeiro - teaser, sem número nenhum (não temos valor de contrato/diária cadastrado ainda) */}
           <div
