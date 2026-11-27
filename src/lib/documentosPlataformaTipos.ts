@@ -60,6 +60,12 @@ export type DocumentoGeral = {
   enviadoPor: string | null;
   enviadoEm: string | null;
   url: string | null;
+  // 27/11: observação livre opcional (pedido do Rafael) - pra distinguir
+  // documentos do mesmo tipo/categoria enviados em épocas diferentes com
+  // propósitos diferentes (ex: "MD de drone" x "MD de escaneamento de
+  // linhas", os dois MD/GM/SS/WO da mesma plataforma). Puramente
+  // informativo, nunca usado em nenhuma lógica/filtro.
+  observacao: string | null;
 };
 
 // 15/09: painel "Resumo da Plataforma" (redesenho aprovado pelo Rafael a
