@@ -241,7 +241,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
           .order("enviado_em", { ascending: false }),
     admin
       .from("documentos_plataforma")
-      .select("id::text, categoria, nome_arquivo, caminho_storage, tamanho_bytes, enviado_por, enviado_em")
+      .select("id::text, categoria, nome_arquivo, caminho_storage, tamanho_bytes, enviado_por, enviado_em, observacao")
       .in("obra_id", obraIds)
       .order("enviado_em", { ascending: false }),
   ]);
@@ -297,6 +297,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
   const geraisLista = (geraisRaw as unknown as {
     id: string; categoria: string; nome_arquivo: string; caminho_storage: string;
     tamanho_bytes: number | null; enviado_por: string | null; enviado_em: string | null;
+    observacao: string | null;
   }[]) || [];
   if (geraisLista.length > 0) {
     // signed URLs em paralelo (Promise.all) - sequencial ficaria lento
@@ -317,6 +318,7 @@ export async function buscarDocumentosPlataforma(grupoKey: string): Promise<Docu
           enviadoPor: doc.enviado_por,
           enviadoEm: doc.enviado_em,
           url: assinada?.signedUrl ?? null,
+          observacao: doc.observacao,
         };
         return item;
       })
