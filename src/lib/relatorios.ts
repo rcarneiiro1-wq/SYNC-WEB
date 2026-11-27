@@ -550,6 +550,11 @@ export type LinhaComparativoColaborador = {
   // recorte - ver nota na implementação abaixo.
   embarcadoAgora: boolean;
   diasParado: number | null; // null quando embarcado agora, ou sem nenhum embarque encerrado ainda
+  // Data (AAAA-MM-DD) da última atividade real da pessoa: o RDO mais
+  // recente lançado, se estiver embarcada agora, ou o fim real do último
+  // embarque encerrado, se estiver parada. null só quando não há nenhum
+  // histórico. Redesign 27/11 - coluna "Última atividade" da tabela.
+  ultimaAtividade: string | null;
   embarques: DetalheEmbarqueRelatorio[];
 };
 
@@ -729,15 +734,30 @@ export async function buscarComparativoColaboradores(periodo: Periodo): Promise<
   }
 
   const hoje = formatarISO(new Date());
-  const atividadePorChave = new Map<string, { embarcadoAgora: boolean; diasParado: number | null }>();
+  const atividadePorChave = new Map<
+    string,
+    { embarcadoAgora: boolean; diasParado: number | null; ultimaAtividade: string | null }
+  >();
   for (const chave of chaves) {
     const meus = historico.filter((e) => (chave.startsWith("nome:") ? e.efetivo_nome === chave.slice(5) : e.colaborador_id === chave));
     if (meus.length === 0) {
-      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null });
+      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null, ultimaAtividade: null });
       continue;
     }
     if (meus.some((e) => e.ativo)) {
-      atividadePorChave.set(chave, { embarcadoAgora: true, diasParado: null });
+      // embarcado agora: "última atividade" é o RDO mais recente lançado
+      // nos embarques ativos (ou a data de início, se ainda não tiver RDO).
+      let ultimaData: string | null = null;
+      for (const e of meus.filter((m) => m.ativo)) {
+        for (const rdo of rdosHistPorEmbarque.get(e.id) || []) {
+          if (!rdo.data) continue;
+          const data = rdo.data.slice(0, 10);
+          if (!ultimaData || data > ultimaData) ultimaData = data;
+        }
+        const inicio = e.data_inicio?.slice(0, 10) || null;
+        if (inicio && (!ultimaData || inicio > ultimaData)) ultimaData = inicio;
+      }
+      atividadePorChave.set(chave, { embarcadoAgora: true, diasParado: null, ultimaAtividade: ultimaData });
       continue;
     }
     let fimMaisRecente: string | null = null;
@@ -746,16 +766,20 @@ export async function buscarComparativoColaboradores(periodo: Periodo): Promise<
       if (!fimMaisRecente || fim > fimMaisRecente) fimMaisRecente = fim;
     }
     if (!fimMaisRecente) {
-      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null });
+      atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: null, ultimaAtividade: null });
       continue;
     }
     const diffMs = new Date(hoje + "T00:00:00").getTime() - new Date(fimMaisRecente + "T00:00:00").getTime();
-    atividadePorChave.set(chave, { embarcadoAgora: false, diasParado: Math.max(0, Math.round(diffMs / 86400000)) });
+    atividadePorChave.set(chave, {
+      embarcadoAgora: false,
+      diasParado: Math.max(0, Math.round(diffMs / 86400000)),
+      ultimaAtividade: fimMaisRecente,
+    });
   }
 
   return Array.from(porColaborador.entries())
     .map(([chave, acc]) => {
-      const atividade = atividadePorChave.get(chave) || { embarcadoAgora: false, diasParado: null };
+      const atividade = atividadePorChave.get(chave) || { embarcadoAgora: false, diasParado: null, ultimaAtividade: null };
       return {
         colaboradorId: chave,
         nome: acc.nome,
@@ -770,6 +794,7 @@ export async function buscarComparativoColaboradores(periodo: Periodo): Promise<
         ativos: acc.ativos,
         embarcadoAgora: atividade.embarcadoAgora,
         diasParado: atividade.diasParado,
+        ultimaAtividade: atividade.ultimaAtividade,
         embarques: acc.embarques.sort((a, b) => b.diariasNoRecorte - a.diariasNoRecorte),
       };
     })
