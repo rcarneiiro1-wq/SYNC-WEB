@@ -41,7 +41,12 @@ export default async function PaginaHistoricoColaborador({
   try {
     nomesSugeridos = await buscarNomesTodosColaboradores();
     if (colaborador) {
-      const filtros: FiltrosHistorico = { colaborador, dataInicio, dataFim };
+      // 27/11: `FiltrosHistorico` não tem mais um campo `colaborador`
+      // separado - virou um `busca` único (nome OU plataforma/código/MD/
+      // GM, ver embarques.ts). Pesquisar só pelo nome aqui é passar ele
+      // como `busca` - o resultado é o mesmo (bate em `efetivo_nome`),
+      // só que agora também normalizado (sem acento/maiúsculo).
+      const filtros: FiltrosHistorico = { busca: colaborador, dataInicio, dataFim };
       linhas = await buscarEmbarquesFinalizados(filtros);
     }
   } catch (e) {
