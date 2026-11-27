@@ -471,7 +471,10 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
     return evolucaoFiltrada
       .map((ponto, i) => {
         const total = Object.values(ponto.porEmpresa).reduce((s, v) => s + v[metricaEvolucao === "embarques" ? "embarques" : "diarias"], 0);
-        const x = (i / (n - 1)) * 100;
+        // centro da coluna do mês (cada mês ocupa 1/n da largura, no grid
+        // logo abaixo) - não a borda, senão a linha fica desalinhada com
+        // as barras
+        const x = ((i + 0.5) / n) * 100;
         const y = 100 - Math.min((total / maiorValorEvolucao) * 100, 100);
         return `${x},${y}`;
       })
@@ -701,10 +704,22 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <div className="relative min-w-max px-0.5">
-                    {/* linha fantasma decorativa (soma de todas as empresas visíveis), atrás das barras */}
+                  {/* 27/11: virou um grid de verdade (em vez de flex "encolhe pro
+                   * conteúdo") - cada mês ocupa uma fração IGUAL da largura total,
+                   * então os meses sempre se espalham por todo o card (mesmo com
+                   * poucas barras, tipo 1 empresa só) em vez de empacotar pra
+                   * esquerda. Isso também é o que deixa a linha fantasma alinhada
+                   * com as barras: as duas usam a mesma régua de 0 a 100%. */}
+                  <div
+                    className="relative"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `repeat(${evolucaoFiltrada.length}, minmax(${Math.max(36, linhasFiltradas.length * 24)}px, 1fr))`,
+                      height: 150,
+                    }}
+                  >
                     {pontosFantasma && (
-                      <svg className="absolute inset-0 w-full h-[150px] pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
                         <defs>
                           <linearGradient id="ghostFade" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="#3D6FA6" stopOpacity="0.16" />
@@ -715,29 +730,27 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
                         <polyline points={pontosFantasma} fill="none" stroke="#3D6FA6" strokeOpacity="0.4" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
                       </svg>
                     )}
-                    <div className="relative flex items-end gap-3 h-[150px]">
-                      {evolucaoFiltrada.map((ponto) => (
-                        <div key={ponto.mes} className="shrink-0 flex flex-col items-center justify-end h-full gap-1">
-                          <div className="flex items-end gap-1 h-full">
-                            {linhasFiltradas.map((linha) => {
-                              const valor = ponto.porEmpresa[linha.empresa]?.[metricaEvolucao] ?? 0;
-                              const alturaPct = (valor / maiorValorEvolucao) * 100;
-                              return (
-                                <div key={linha.empresa} className="flex flex-col items-center justify-end h-full w-5 shrink-0">
-                                  {valor > 0 && <span className="text-[10px] font-bold text-gray-500 mb-0.5">{valor}</span>}
-                                  <div
-                                    title={`${capitalizar(linha.empresa)} — ${ponto.rotulo}: ${valor} ${metricaEvolucao === "embarques" ? "embarque(s)" : "diária(s)"}`}
-                                    className="w-full rounded-t-sm transition-opacity hover:opacity-80"
-                                    style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">{ponto.rotulo.split("/")[0]}</span>
+                    {evolucaoFiltrada.map((ponto) => (
+                      <div key={ponto.mes} className="relative flex flex-col items-center justify-end h-full gap-1">
+                        <div className="flex items-end gap-1 h-full">
+                          {linhasFiltradas.map((linha) => {
+                            const valor = ponto.porEmpresa[linha.empresa]?.[metricaEvolucao] ?? 0;
+                            const alturaPct = (valor / maiorValorEvolucao) * 100;
+                            return (
+                              <div key={linha.empresa} className="flex flex-col items-center justify-end h-full w-5 shrink-0">
+                                {valor > 0 && <span className="text-[10px] font-bold text-gray-500 mb-0.5">{valor}</span>}
+                                <div
+                                  title={`${capitalizar(linha.empresa)} — ${ponto.rotulo}: ${valor} ${metricaEvolucao === "embarques" ? "embarque(s)" : "diária(s)"}`}
+                                  className="w-full rounded-t-sm transition-opacity hover:opacity-80"
+                                  style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }}
+                                />
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+                        <span className="text-[11px] font-medium text-gray-500 whitespace-nowrap">{ponto.rotulo.split("/")[0]}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
