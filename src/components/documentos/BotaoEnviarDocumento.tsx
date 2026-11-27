@@ -12,15 +12,37 @@ import type { CategoriaDocumento } from "@/lib/documentosPlataformaTipos";
 /** Botão "➕ Enviar arquivo" reutilizado nos dois lugares combinados com o
  * Rafael em 14/09: inline em cada card de categoria (igual o mockup que ele
  * aprovou) E na tela dedicada "Upload de Arquivos" da sidebar - os dois
- * chamam a MESMA Server Action, então o comportamento é sempre idêntico. */
+ * chamam a MESMA Server Action, então o comportamento é sempre idêntico.
+ *
+ * 27/11 (pedido do Rafael): antes de enviar de verdade, abre um painel
+ * pequeno pra digitar uma observação opcional (ex: "MD de escaneamento de
+ * linhas") - é o jeito dele distinguir documentos do mesmo tipo/categoria
+ * enviados em épocas diferentes, só pelo nome do arquivo isso já não dava.
+ * Uma observação só vale pro LOTE inteiro escolhido de uma vez (normal: é
+ * o mesmo motivo de upload pros arquivos escolhidos juntos). */
 export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; categoria: CategoriaDocumento }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [pendentes, setPendentes] = useState<File[] | null>(null);
+  const [observacao, setObservacao] = useState("");
 
-  const aoEscolherArquivos = async (arquivos: FileList | null) => {
+  const aoEscolherArquivos = (arquivos: FileList | null) => {
     if (!arquivos || arquivos.length === 0) return;
+    setErro(null);
+    setObservacao("");
+    setPendentes(Array.from(arquivos));
+  };
+
+  const cancelar = () => {
+    setPendentes(null);
+    setObservacao("");
+    if (inputRef.current) inputRef.current.value = "";
+  };
+
+  const confirmarEnvio = async () => {
+    if (!pendentes || pendentes.length === 0) return;
     setProcessando(true);
     setErro(null);
     // try/catch/finally - mesmo motivo já documentado em SecaoAnexos.tsx
@@ -31,9 +53,10 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
     // o arquivo em si nunca passa pela Server Action (seria barrado pelo
     // limite de 4.5MB da própria Vercel, que é bem menor que os 50MB que a
     // tela promete); ele vai DIRETO pro Supabase Storage usando um link
-    // assinado, e só o metadado (nome/tamanho/categoria) passa pela action.
+    // assinado, e só o metadado (nome/tamanho/categoria/observação) passa
+    // pela action.
     try {
-      for (const arquivo of Array.from(arquivos)) {
+      for (const arquivo of pendentes) {
         const preparo = await prepararUploadDocumentoPlataforma(obraId, categoria, arquivo.name, arquivo.size);
         if (!preparo.sucesso) {
           setErro(preparo.erro);
@@ -57,12 +80,15 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
           caminhoNoBucket: preparo.caminhoNoBucket,
           nomeArquivo: arquivo.name,
           tamanhoBytes: arquivo.size,
+          observacao,
         });
         if (!resultado.sucesso) {
           setErro(resultado.erro);
           break;
         }
       }
+      setPendentes(null);
+      setObservacao("");
     } catch {
       setErro("Não consegui completar o envio - confere a internet e tenta de novo.");
     } finally {
@@ -73,7 +99,7 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
   };
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div className="relative flex flex-col items-end gap-1">
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
@@ -91,6 +117,45 @@ export function BotaoEnviarDocumento({ obraId, categoria }: { obraId: string; ca
         onChange={(e) => aoEscolherArquivos(e.target.files)}
       />
       {erro && <p className="text-[11px] text-vermelho text-right max-w-[220px]">{erro}</p>}
+
+      {pendentes && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => !processando && cancelar()} />
+          <div className="absolute right-0 top-9 z-50 w-64 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-left">
+            <p className="text-xs font-semibold text-navy mb-1">
+              {pendentes.length === 1 ? pendentes[0].name : `${pendentes.length} arquivos selecionados`}
+            </p>
+            <label className="block text-[11px] text-gray-500 mb-1">Observação (opcional)</label>
+            <textarea
+              autoFocus
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              placeholder="ex: MD de escaneamento de linhas"
+              rows={2}
+              disabled={processando}
+              className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-azul disabled:opacity-60"
+            />
+            <div className="flex items-center justify-end gap-2 mt-2">
+              <button
+                type="button"
+                onClick={cancelar}
+                disabled={processando}
+                className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 cursor-pointer disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarEnvio}
+                disabled={processando}
+                className="text-xs font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md px-3 py-1.5 cursor-pointer disabled:opacity-60 disabled:cursor-wait whitespace-nowrap"
+              >
+                {processando ? "Enviando..." : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
