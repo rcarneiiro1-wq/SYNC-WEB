@@ -445,8 +445,16 @@ export async function buscarOpcoesFiltro(): Promise<{ sugestoes: string[] }> {
  * batem todos com o código cadastrado "MV-33". Mesma ideia da
  * `normalizarCodigo` em documentosPlataforma.ts, duplicada aqui (em vez de
  * importada) pra não criar import circular - aquele arquivo já importa
- * DESTE. */
-function normalizarBusca(texto: string): string {
+ * DESTE.
+ *
+ * 27/11: exportada também pra servir de chave de agrupamento por
+ * plataforma no Histórico (`TabelaHistorico.tsx`) - confirmado no banco
+ * que o MESMO "obra_id" não identifica a mesma plataforma física: cada
+ * ciclo de embarque costuma criar um cadastro de obra novo (ex: "P-75" e
+ * "PLATAFORMA P-75" são 2 obras diferentes), mas o `local_codigo` se
+ * mantém estável entre eles ("P75" nos dois) - então normalizar e
+ * comparar por ele agrupa certo, sem precisar mexer no cadastro. */
+export function normalizarBusca(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
