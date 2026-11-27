@@ -7,7 +7,7 @@ import type { CategoriaDocumento, DocumentoGeral } from "@/lib/documentosPlatafo
 import { ROTULO_CATEGORIA } from "@/lib/documentosPlataformaTipos";
 import { urlDownloadArquivo } from "@/lib/download";
 import { tempoRelativo } from "@/lib/tempo";
-import { removerDocumentoPlataforma } from "@/lib/documentosPlataformaActions";
+import { removerDocumentoPlataforma, atualizarObservacaoDocumentoPlataforma } from "@/lib/documentosPlataformaActions";
 import { BotaoEnviarDocumento } from "./BotaoEnviarDocumento";
 
 function tamanhoLegivel(bytes: number | null): string {
@@ -63,6 +63,34 @@ export function CategoriaDocumentoGeral({
   const router = useRouter();
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
+  // 27/11 (pedido do Rafael): edição da observação depois do upload - cobre
+  // o caso dele mesmo de um documento já enviado há dias sem nenhuma nota.
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [textoObservacao, setTextoObservacao] = useState("");
+  const [salvandoObservacao, setSalvandoObservacao] = useState(false);
+
+  const abrirEdicaoObservacao = (doc: DocumentoGeral) => {
+    setMenuAberto(null);
+    setEditandoId(doc.id);
+    setTextoObservacao(doc.observacao ?? "");
+  };
+
+  const salvarObservacao = async (id: string) => {
+    setSalvandoObservacao(true);
+    try {
+      const resultado = await atualizarObservacaoDocumentoPlataforma(id, textoObservacao);
+      if (!resultado.sucesso) {
+        window.alert(resultado.erro);
+        return;
+      }
+      setEditandoId(null);
+    } catch {
+      window.alert("Não consegui salvar - confere a internet e tenta de novo.");
+    } finally {
+      setSalvandoObservacao(false);
+      router.refresh();
+    }
+  };
 
   const remover = async (id: string, nome: string) => {
     setMenuAberto(null);
@@ -137,6 +165,41 @@ export function CategoriaDocumentoGeral({
                 <p className="text-[11px] text-gray-400 mt-0.5">
                   {tamanhoLegivel(doc.tamanhoBytes)} · {doc.enviadoPor || "-"} · {tempoRelativo(doc.enviadoEm)}
                 </p>
+                {editandoId === doc.id ? (
+                  <div className="mt-1.5">
+                    <textarea
+                      autoFocus
+                      value={textoObservacao}
+                      onChange={(e) => setTextoObservacao(e.target.value)}
+                      placeholder="ex: MD de escaneamento de linhas"
+                      rows={2}
+                      disabled={salvandoObservacao}
+                      className="w-full text-xs border border-gray-200 rounded-md px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-azul disabled:opacity-60"
+                    />
+                    <div className="flex items-center justify-end gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setEditandoId(null)}
+                        disabled={salvandoObservacao}
+                        className="text-[11px] text-gray-500 hover:text-gray-700 px-2 py-1 cursor-pointer disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => salvarObservacao(doc.id)}
+                        disabled={salvandoObservacao}
+                        className="text-[11px] font-bold text-white bg-azul-escuro hover:bg-navy transition-colors rounded-md px-2.5 py-1 cursor-pointer disabled:opacity-60"
+                      >
+                        {salvandoObservacao ? "Salvando..." : "Salvar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  doc.observacao && (
+                    <p className="text-[11px] text-gray-500 italic mt-1 break-words">📝 {doc.observacao}</p>
+                  )
+                )}
               </div>
 
               {menuAberto === doc.id && (
@@ -152,6 +215,13 @@ export function CategoriaDocumentoGeral({
                         ⬇ Baixar
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => abrirEdicaoObservacao(doc)}
+                      className="block w-full text-left px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 cursor-pointer"
+                    >
+                      📝 {doc.observacao ? "Editar observação" : "Adicionar observação"}
+                    </button>
                     <button
                       type="button"
                       onClick={() => remover(doc.id, doc.nomeArquivo)}
