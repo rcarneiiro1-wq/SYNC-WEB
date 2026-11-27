@@ -44,17 +44,15 @@ export default async function PaginaHistorico({
   const empresas = empresasParam ? (Array.isArray(empresasParam) ? empresasParam : [empresasParam]) : [];
 
   const filtros: FiltrosHistorico = {
-    colaborador: _texto(params.colaborador),
-    obra: _texto(params.obra),
+    busca: _texto(params.busca),
     empresas,
     dataInicio: _texto(params.dataInicio),
     dataFim: _texto(params.dataFim),
-    situacao: (_texto(params.situacao) as FiltrosHistorico["situacao"]) || "todos",
   };
 
   let linhas: LinhaHistorico[] = [];
   let erro: string | null = null;
-  let opcoes: { colaboradores: string[]; obras: string[] } = { colaboradores: [], obras: [] };
+  let opcoes: { sugestoes: string[] } = { sugestoes: [] };
   let empresasCadastradas: string[] = [];
 
   try {
@@ -71,8 +69,7 @@ export default async function PaginaHistorico({
   }
 
   const temFiltroAtivo = Boolean(
-    filtros.colaborador || filtros.obra || (filtros.empresas && filtros.empresas.length > 0) ||
-      filtros.dataInicio || filtros.dataFim || (filtros.situacao && filtros.situacao !== "todos")
+    filtros.busca || (filtros.empresas && filtros.empresas.length > 0) || filtros.dataInicio || filtros.dataFim
   );
 
   return (
@@ -82,16 +79,18 @@ export default async function PaginaHistorico({
         <h1 className="text-xl font-bold text-navy mb-6">Histórico de embarques finalizados</h1>
 
         <FiltroHistorico
-          colaboradoresSugeridos={opcoes.colaboradores}
-          obrasSugeridas={opcoes.obras}
+          sugestoes={opcoes.sugestoes}
           empresasCadastradas={empresasCadastradas}
           valoresIniciais={{
-            colaborador: filtros.colaborador ?? "",
-            obra: filtros.obra ?? "",
+            busca: filtros.busca ?? "",
             empresas: filtros.empresas ?? [],
-            situacao: filtros.situacao ?? "todos",
-            dataInicio: filtros.dataInicio ?? "",
-            dataFim: filtros.dataFim ?? "",
+            // 27/11: o filtro por período agora é por MÊS (ver
+            // FiltroHistorico.tsx) - se a URL já trouxer uma data
+            // completa (ex: um link antigo, ou o "Limpar" voltando),
+            // recorta só o "AAAA-MM" pra pré-selecionar o mês certo no
+            // dropdown.
+            mesDe: filtros.dataInicio ? filtros.dataInicio.slice(0, 7) : "",
+            mesAte: filtros.dataFim ? filtros.dataFim.slice(0, 7) : "",
           }}
         />
 
