@@ -16,23 +16,25 @@ const NOMES_MES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-/** 27/11 (pedido do Rafael): lista de meses pra ESCOLHER no "De"/"Até" em
- * vez de digitar a data (ele achou mais fácil pro pessoal leigo clicar na
- * seta do que preencher dd/mm/aaaa). Cobre os últimos 24 meses até o mês
- * atual - como é calculado a partir de "hoje" (não é uma lista fixa), vai
- * sempre acompanhar o calendário sozinho conforme a empresa for crescendo
+/** 27/11 (ajuste depois do Rafael reparar "2 Janeiros" na lista - tinha
+ * misturado mês+ano numa lista só de 24 meses, dava pra repetir o mesmo
+ * nome de mês duas vezes sem ficar óbvio de qual ano). Agora o mês é uma
+ * lista fixa de 12 nomes normais (Janeiro...Dezembro) - o ano vai num
+ * segundo "seta" separado, ver `gerarOpcoesAno`. */
+const OPCOES_MES = NOMES_MES.map((nome, indice) => ({
+  valor: String(indice + 1).padStart(2, "0"),
+  rotulo: nome,
+}));
+
+/** Lista de anos pro segundo "seta" do De/Até - do ano atual pra trás, 4
+ * anos de folga. Calculada a partir de "hoje" (não é fixa), então vai
+ * sempre acompanhar o calendário sozinha conforme a empresa for crescendo
  * e acumulando mais histórico, sem precisar mexer nisso de novo. */
-function gerarOpcoesMes(): { valor: string; rotulo: string }[] {
-  const opcoes: { valor: string; rotulo: string }[] = [];
-  const hoje = new Date();
-  for (let i = 23; i >= 0; i--) {
-    const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-    const ano = data.getFullYear();
-    const mes = data.getMonth() + 1;
-    const valor = `${ano}-${String(mes).padStart(2, "0")}`;
-    opcoes.push({ valor, rotulo: `${NOMES_MES[mes - 1]} de ${ano}` });
-  }
-  return opcoes;
+function gerarOpcoesAno(): string[] {
+  const anoAtual = new Date().getFullYear();
+  const anos: string[] = [];
+  for (let ano = anoAtual - 4; ano <= anoAtual; ano++) anos.push(String(ano));
+  return anos;
 }
 
 /** "AAAA-MM" -> "AAAA-MM-DD" do ÚLTIMO dia daquele mês (dia 0 do mês
@@ -56,17 +58,23 @@ export function FiltroHistorico({
   const router = useRouter();
   const [busca, setBusca] = useState(valoresIniciais.busca);
   const [empresas, setEmpresas] = useState<Set<string>>(new Set(valoresIniciais.empresas));
-  const [mesDe, setMesDe] = useState(valoresIniciais.mesDe);
-  const [mesAte, setMesAte] = useState(valoresIniciais.mesAte);
-  const opcoesMes = useMemo(() => gerarOpcoesMes(), []);
+  // "AAAA-MM" (vindo do servidor, ver historico/page.tsx) vira 2 pedaços
+  // separados aqui dentro - um pro select de Mês, outro pro select de Ano.
+  const [mesDeMes, setMesDeMes] = useState(valoresIniciais.mesDe.slice(5, 7));
+  const [mesDeAno, setMesDeAno] = useState(valoresIniciais.mesDe.slice(0, 4));
+  const [mesAteMes, setMesAteMes] = useState(valoresIniciais.mesAte.slice(5, 7));
+  const [mesAteAno, setMesAteAno] = useState(valoresIniciais.mesAte.slice(0, 4));
+  const opcoesAno = useMemo(() => gerarOpcoesAno(), []);
 
   function buscar(e: React.FormEvent) {
     e.preventDefault();
     const params = new URLSearchParams();
     if (busca) params.set("busca", busca);
     for (const empresa of empresas) params.append("empresa", empresa);
-    if (mesDe) params.set("dataInicio", `${mesDe}-01`);
-    if (mesAte) params.set("dataFim", ultimoDiaDoMes(mesAte));
+    // só aplica o limite se mês E ano estiverem escolhidos - só um dos dois
+    // sozinho não forma uma data, melhor ignorar do que adivinhar.
+    if (mesDeMes && mesDeAno) params.set("dataInicio", `${mesDeAno}-${mesDeMes}-01`);
+    if (mesAteMes && mesAteAno) params.set("dataFim", ultimoDiaDoMes(`${mesAteAno}-${mesAteMes}`));
     const querystring = params.toString();
     router.push(`/historico${querystring ? `?${querystring}` : ""}`);
   }
@@ -74,8 +82,10 @@ export function FiltroHistorico({
   function limpar() {
     setBusca("");
     setEmpresas(new Set());
-    setMesDe("");
-    setMesAte("");
+    setMesDeMes("");
+    setMesDeAno("");
+    setMesAteMes("");
+    setMesAteAno("");
     router.push("/historico");
   }
 
@@ -120,38 +130,66 @@ export function FiltroHistorico({
           <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-mes-de">
             De
           </label>
-          <select
-            id="filtro-mes-de"
-            value={mesDe}
-            onChange={(e) => setMesDe(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-          >
-            <option value="">Qualquer mês</option>
-            {opcoesMes.map((o) => (
-              <option key={o.valor} value={o.valor}>
-                {o.rotulo}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-1.5">
+            <select
+              id="filtro-mes-de"
+              value={mesDeMes}
+              onChange={(e) => setMesDeMes(e.target.value)}
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
+            >
+              <option value="">Mês</option>
+              {OPCOES_MES.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.rotulo}
+                </option>
+              ))}
+            </select>
+            <select
+              value={mesDeAno}
+              onChange={(e) => setMesDeAno(e.target.value)}
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
+            >
+              <option value="">Ano</option>
+              {opcoesAno.map((ano) => (
+                <option key={ano} value={ano}>
+                  {ano}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex flex-col gap-1">
           <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-mes-ate">
             Até
           </label>
-          <select
-            id="filtro-mes-ate"
-            value={mesAte}
-            onChange={(e) => setMesAte(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-          >
-            <option value="">Qualquer mês</option>
-            {opcoesMes.map((o) => (
-              <option key={o.valor} value={o.valor}>
-                {o.rotulo}
-              </option>
-            ))}
-          </select>
+          <div className="flex gap-1.5">
+            <select
+              id="filtro-mes-ate"
+              value={mesAteMes}
+              onChange={(e) => setMesAteMes(e.target.value)}
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
+            >
+              <option value="">Mês</option>
+              {OPCOES_MES.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.rotulo}
+                </option>
+              ))}
+            </select>
+            <select
+              value={mesAteAno}
+              onChange={(e) => setMesAteAno(e.target.value)}
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
+            >
+              <option value="">Ano</option>
+              {opcoesAno.map((ano) => (
+                <option key={ano} value={ano}>
+                  {ano}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex gap-2">
