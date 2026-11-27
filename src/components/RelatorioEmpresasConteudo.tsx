@@ -14,7 +14,7 @@ import {
   type LinhaRelatorioEmpresa,
   type PontoEvolucaoMensal,
 } from "@/lib/relatorios";
-import { SeletorEmpresas, corDaEmpresa } from "@/components/SeletorEmpresas";
+import { SeletorEmpresas } from "@/components/SeletorEmpresas";
 
 type TipoPeriodo = "calendario" | "fechamento" | "ano";
 type MetricaParticipacao = "embarques" | "diarias";
@@ -34,6 +34,29 @@ function formatarDataBr(iso: string): string {
 
 function capitalizar(nome: string): string {
   return nome.length > 0 ? nome.charAt(0).toUpperCase() + nome.slice(1) : nome;
+}
+
+/** 27/11 (pedido do Rafael, seguindo a referência "Painel de Desempenho
+ * por Empresa"): Infotec e Hydra ganham uma cor FIXA (azul escuro / azul
+ * claro), em vez da paleta cíclica por hash que o resto do app usa (ver
+ * `corDaEmpresa` em SeletorEmpresas.tsx) - fica igual à imagem de
+ * referência enquanto só existirem essas duas. Qualquer empresa nova cai
+ * de volta na paleta cíclica existente, então o sistema não quebra
+ * quando a 3ª empresa for cadastrada - só não vai ter uma cor "fixa"
+ * reservada pra ela até alguém decidir uma. */
+const CORES_FIXAS: Record<string, string> = {
+  infotec: "#2C5480", // azul escuro (mesmo tom do token --color-azul-escuro já usado no resto do app)
+  hydra: "#7FB2E5", // azul claro
+};
+
+function corPrincipalEmpresa(nome: string): string {
+  const fixa = CORES_FIXAS[nome.trim().toLowerCase()];
+  if (fixa) return fixa;
+  // fallback determinístico (mesma lógica do SeletorEmpresas) pra empresas futuras
+  const PALETA_FALLBACK = ["#3D6FA6", "#3d7a3d", "#6a4fb0", "#c07a12", "#c0392b", "#0f9488"];
+  let soma = 0;
+  for (let i = 0; i < nome.length; i++) soma += nome.charCodeAt(i);
+  return PALETA_FALLBACK[soma % PALETA_FALLBACK.length];
 }
 
 /** "Bom" quando não tem nenhuma pendência em aberto; "Atenção" quando tem
@@ -57,6 +80,64 @@ function BadgeSaude({ linha }: { linha: LinhaRelatorioEmpresa }) {
   );
 }
 
+/** Donut genérico (SVG puro, sem biblioteca - o projeto não tem nenhuma
+ * já instalada) via o truque clássico de `strokeDasharray`/`strokeDashoffset`
+ * num círculo só. Reaproveitado nos dois cards de participação (topo e
+ * rodapé) - só muda o que entra em `segmentos`. */
+function DonutChart({
+  segmentos,
+  tamanho = 168,
+  espessura = 24,
+  rotuloCentro,
+  legendaCentro,
+}: {
+  segmentos: { empresa: string; valor: number; cor: string }[];
+  tamanho?: number;
+  espessura?: number;
+  rotuloCentro: string;
+  legendaCentro: string;
+}) {
+  const raio = (tamanho - espessura) / 2;
+  const circunferencia = 2 * Math.PI * raio;
+  const total = segmentos.reduce((s, d) => s + d.valor, 0);
+  let acumulado = 0;
+
+  return (
+    <div className="relative shrink-0" style={{ width: tamanho, height: tamanho }}>
+      <svg viewBox={`0 0 ${tamanho} ${tamanho}`} width={tamanho} height={tamanho} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={tamanho / 2} cy={tamanho / 2} r={raio} fill="none" stroke="#eef2f6" strokeWidth={espessura} />
+        {total > 0 &&
+          segmentos
+            .filter((seg) => seg.valor > 0)
+            .map((seg) => {
+              const comprimento = (seg.valor / total) * circunferencia;
+              const offset = -acumulado;
+              acumulado += comprimento;
+              return (
+                <circle
+                  key={seg.empresa}
+                  cx={tamanho / 2}
+                  cy={tamanho / 2}
+                  r={raio}
+                  fill="none"
+                  stroke={seg.cor}
+                  strokeWidth={espessura}
+                  strokeDasharray={`${comprimento} ${circunferencia - comprimento}`}
+                  strokeDashoffset={offset}
+                >
+                  <title>{`${capitalizar(seg.empresa)}: ${seg.valor}`}</title>
+                </circle>
+              );
+            })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-2xl font-extrabold text-navy leading-tight">{rotuloCentro}</span>
+        <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{legendaCentro}</span>
+      </div>
+    </div>
+  );
+}
+
 function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; maiorDiarias: number }) {
   const [aberto, setAberto] = useState(false);
   const proporcao = maiorDiarias > 0 ? Math.round((linha.totalDiarias / maiorDiarias) * 100) : 0;
@@ -66,64 +147,37 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
   const diasPorEmbarque = linha.numeroEmbarques > 0
     ? Math.round((linha.totalDiarias / linha.numeroEmbarques) * 10) / 10
     : null;
-  const cor = corDaEmpresa(linha.empresa);
+  const cor = corPrincipalEmpresa(linha.empresa);
 
   return (
     <>
       <tr className="border-b border-gray-100 last:border-0">
-        <td className="py-3.5 px-4">
+        <td className="py-3.5 px-3">
           <p className="text-sm font-semibold text-navy capitalize flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cor.fg }} />
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cor }} />
             {linha.empresa}
           </p>
         </td>
-        <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.numeroEmbarques}</td>
-        <td className="py-3.5 px-4">
-          <div className="flex items-center gap-2 justify-center">
-            {linha.completos > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-verde bg-verde/10 px-2 py-0.5 rounded-full">
-                ✓ {linha.completos}
-              </span>
-            )}
-            {linha.comPendencia > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-amarelo bg-amarelo/10 px-2 py-0.5 rounded-full">
-                ⚠ {linha.comPendencia}
-              </span>
-            )}
-            {linha.ativos > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-azul bg-azul/10 px-2 py-0.5 rounded-full">
-                ● {linha.ativos} ativo{linha.ativos === 1 ? "" : "s"}
-              </span>
-            )}
-            {linha.semInformacao > 0 && (
-              <span
-                className="text-xs text-gray-300"
-                title="Encerrado antes de existir esse controle de status - não dá pra saber se ficou pendência"
-              >
-                {linha.semInformacao} sem info
-              </span>
-            )}
-          </div>
-        </td>
-        <td className="py-3.5 px-4">
-          <div className="flex items-center gap-3">
+        <td className="py-3.5 px-2 text-center text-sm text-gray-600">{linha.numeroEmbarques}</td>
+        <td className="py-3.5 px-3">
+          <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-gray-700 w-10 text-right">{linha.totalDiarias}</span>
             <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
-              <div className="h-full rounded-full" style={{ width: `${proporcao}%`, backgroundColor: cor.fg }} />
+              <div className="h-full rounded-full" style={{ width: `${proporcao}%`, backgroundColor: cor }} />
             </div>
           </div>
         </td>
-        <td className="py-3.5 px-4 text-center text-sm text-gray-600">{linha.colaboradoresDistintos}</td>
-        <td className="py-3.5 px-4 text-center text-sm text-gray-600">
+        <td className="py-3.5 px-2 text-center text-sm text-gray-600">{linha.colaboradoresDistintos}</td>
+        <td className="py-3.5 px-2 text-center text-sm text-gray-600">
           {diariasPorColaborador !== null ? diariasPorColaborador : "-"}
         </td>
-        <td className="py-3.5 px-4 text-center text-sm text-gray-600">
+        <td className="py-3.5 px-2 text-center text-sm text-gray-600">
           {diasPorEmbarque !== null ? diasPorEmbarque : "-"}
         </td>
-        <td className="py-3.5 px-4 text-center text-sm text-gray-600">
+        <td className="py-3.5 px-2 text-center text-sm text-gray-600">
           {linha.percentualMedio !== null ? `${linha.percentualMedio}%` : "-"}</td>
-        <td className="py-3.5 px-4 text-center"><BadgeSaude linha={linha} /></td>
-        <td className="py-3.5 px-4 text-center">
+        <td className="py-3.5 px-2 text-center"><BadgeSaude linha={linha} /></td>
+        <td className="py-3.5 px-2 text-center">
           <button
             type="button"
             onClick={() => setAberto((a) => !a)}
@@ -135,7 +189,7 @@ function LinhaTabela({ linha, maiorDiarias }: { linha: LinhaRelatorioEmpresa; ma
       </tr>
       {aberto && (
         <tr className="bg-gray-50/70">
-          <td colSpan={9} className="px-4 pb-4 pt-1">
+          <td colSpan={8} className="px-4 pb-4 pt-1">
             {linha.embarques.length === 0 ? (
               <p className="text-xs text-gray-400 py-2">Nenhum embarque no detalhe.</p>
             ) : (
@@ -288,6 +342,7 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
   const totalParticipacao = linhasFiltradas.reduce(
     (s, l) => s + (metricaParticipacao === "embarques" ? l.numeroEmbarques : l.totalDiarias), 0
   );
+  const totalDiariasParticipacao = totalDiarias; // card do rodapé é sempre por diárias, sem alternância
 
   const maiorValorEvolucao = Math.max(
     1,
@@ -296,48 +351,46 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
 
   return (
     <>
-      {/* Cards de empresa - selecionar uma ou mais pra ver só elas */}
-      <div className="mb-5">
+      {/* Empresas + tipo de período - uma área só de filtros, lado a lado */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-5">
         <SeletorEmpresas
           empresas={empresasCadastradas}
           selecionadas={empresasSelecionadas}
           aoMudar={setEmpresasSelecionadas}
         />
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => trocarTipo("calendario")}
+            className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors whitespace-nowrap ${
+              tipoPeriodo === "calendario" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
+            }`}
+          >
+            Mês calendário
+          </button>
+          <button
+            type="button"
+            onClick={() => trocarTipo("fechamento")}
+            className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors whitespace-nowrap ${
+              tipoPeriodo === "fechamento" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
+            }`}
+          >
+            Período de fechamento (20 a 19)
+          </button>
+          <button
+            type="button"
+            onClick={() => trocarTipo("ano")}
+            className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors whitespace-nowrap ${
+              tipoPeriodo === "ano" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
+            }`}
+          >
+            Ano todo
+          </button>
+        </div>
       </div>
 
-      {/* Seletor de tipo de período */}
-      <div className="flex gap-2 mb-4">
-        <button
-          type="button"
-          onClick={() => trocarTipo("calendario")}
-          className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors ${
-            tipoPeriodo === "calendario" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
-          }`}
-        >
-          Mês calendário
-        </button>
-        <button
-          type="button"
-          onClick={() => trocarTipo("fechamento")}
-          className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors ${
-            tipoPeriodo === "fechamento" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
-          }`}
-        >
-          Período de fechamento (20 a 19)
-        </button>
-        <button
-          type="button"
-          onClick={() => trocarTipo("ano")}
-          className={`text-sm font-medium px-4 py-2 rounded-md border transition-colors ${
-            tipoPeriodo === "ano" ? "bg-navy text-white border-navy" : "bg-white text-gray-600 border-gray-300 hover:border-navy"
-          }`}
-        >
-          Ano todo
-        </button>
-      </div>
-
-      {/* Navegador de período */}
-      <div className="flex items-center gap-3 mb-6">
+      {/* Navegador de período - centralizado e destacado */}
+      <div className="flex items-center justify-center gap-4 mb-6 bg-white border border-gray-200 rounded-lg py-3">
         <button
           type="button"
           onClick={() => navegar(-1)}
@@ -346,7 +399,7 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
           ←
         </button>
         <div className="text-center min-w-[220px]">
-          <p className="text-base font-semibold text-navy">{periodo.rotulo}</p>
+          <p className="text-lg font-bold text-navy">{periodo.rotulo}</p>
           <p className="text-xs text-gray-400">
             {formatarDataBr(periodo.inicio)} até {formatarDataBr(periodo.fim)}
           </p>
@@ -385,41 +438,47 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
         <>
           {/* KPIs combinados */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-md bg-azul/10 text-azul flex items-center justify-center shrink-0"><Ship size={16} /></span>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 flex items-start gap-3">
+              <span className="w-9 h-9 rounded-lg bg-azul/10 text-azul flex items-center justify-center shrink-0"><Ship size={17} /></span>
               <div>
                 <p className="text-[11px] text-gray-400 font-medium">Total de embarques</p>
-                <p className="text-lg font-extrabold text-navy leading-tight">{totalEmbarques}</p>
+                <p className="text-xl font-extrabold text-navy leading-tight">{totalEmbarques}</p>
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-md bg-verde/10 text-verde flex items-center justify-center shrink-0"><Calendar size={16} /></span>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 flex items-start gap-3">
+              <span className="w-9 h-9 rounded-lg bg-verde/10 text-verde flex items-center justify-center shrink-0"><Calendar size={17} /></span>
               <div>
                 <p className="text-[11px] text-gray-400 font-medium">Total de diárias</p>
-                <p className="text-lg font-extrabold text-navy leading-tight">{totalDiarias}</p>
+                <p className="text-xl font-extrabold text-navy leading-tight">{totalDiarias}</p>
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-md bg-navy/10 text-navy flex items-center justify-center shrink-0"><Users size={16} /></span>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 flex items-start gap-3">
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#EEE9F9", color: "#6a4fb0" }}>
+                <Users size={17} />
+              </span>
               <div>
                 <p className="text-[11px] text-gray-400 font-medium">Colaboradores distintos</p>
-                <p className="text-lg font-extrabold text-navy leading-tight">{colaboradoresDistintosTotal}</p>
+                <p className="text-xl font-extrabold text-navy leading-tight">{colaboradoresDistintosTotal}</p>
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-md bg-amarelo/10 text-amarelo flex items-center justify-center shrink-0"><Clock size={16} /></span>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 flex items-start gap-3">
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#FBF0DF", color: "#c07a12" }}>
+                <Clock size={17} />
+              </span>
               <div>
                 <p className="text-[11px] text-gray-400 font-medium">Média diárias/embarque</p>
-                <p className="text-lg font-extrabold text-navy leading-tight">
+                <p className="text-xl font-extrabold text-navy leading-tight">
                   {mediaDiariasPorEmbarque !== null ? mediaDiariasPorEmbarque.toLocaleString("pt-BR") : "-"}
                 </p>
               </div>
             </div>
-            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="w-8 h-8 rounded-md bg-azul-escuro/10 text-azul-escuro flex items-center justify-center shrink-0"><TrendingUp size={16} /></span>
+            <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 flex items-start gap-3">
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: "#E3F2FD", color: "#1E88E5" }}>
+                <TrendingUp size={17} />
+              </span>
               <div>
                 <p className="text-[11px] text-gray-400 font-medium">Avanço médio geral</p>
-                <p className="text-lg font-extrabold text-navy leading-tight">
+                <p className="text-xl font-extrabold text-navy leading-tight">
                   {percentualMedioGeral !== null ? `${percentualMedioGeral}%` : "-"}
                 </p>
               </div>
@@ -429,7 +488,7 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
           {/* Participação · Evolução mensal · Saúde da execução */}
           <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: `repeat(${numPaineis}, minmax(0, 1fr))` }}>
             {mostrarParticipacao && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-bold text-navy">Participação no período</h3>
                   <div className="flex gap-0.5 bg-gray-100 rounded-md p-0.5">
@@ -449,46 +508,43 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
                     </button>
                   </div>
                 </div>
-                <div className="flex w-full h-6 rounded-md overflow-hidden gap-0.5 bg-gray-100 mb-3">
-                  {linhasFiltradas.map((linha) => {
-                    const valor = metricaParticipacao === "embarques" ? linha.numeroEmbarques : linha.totalDiarias;
-                    const pct = totalParticipacao > 0 ? (valor / totalParticipacao) * 100 : 0;
-                    return (
-                      <div
-                        key={linha.empresa}
-                        title={`${capitalizar(linha.empresa)}: ${pct.toFixed(1)}%`}
-                        className="flex items-center justify-center text-[11px] font-bold text-white"
-                        style={{ width: `${pct}%`, backgroundColor: corDaEmpresa(linha.empresa).fg }}
-                      >
-                        {pct >= 8 ? `${pct.toFixed(1)}%` : ""}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  {linhasFiltradas.map((linha) => (
-                    <div key={linha.empresa} className="flex items-center justify-between text-xs">
-                      <span className="flex items-center gap-1.5 font-semibold text-navy capitalize">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDaEmpresa(linha.empresa).fg }} />
-                        {linha.empresa}
-                      </span>
-                      <span className="text-gray-500">
-                        {metricaParticipacao === "embarques" ? `${linha.numeroEmbarques} embarque${linha.numeroEmbarques === 1 ? "" : "s"}` : `${linha.totalDiarias} diárias`}
-                      </span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-5">
+                  <DonutChart
+                    segmentos={linhasFiltradas.map((l) => ({
+                      empresa: l.empresa,
+                      valor: metricaParticipacao === "embarques" ? l.numeroEmbarques : l.totalDiarias,
+                      cor: corPrincipalEmpresa(l.empresa),
+                    }))}
+                    rotuloCentro={String(totalParticipacao)}
+                    legendaCentro={metricaParticipacao === "embarques" ? "embarques" : "diárias"}
+                  />
+                  <div className="flex flex-col gap-2.5 flex-1 min-w-0">
+                    {linhasFiltradas.map((linha) => {
+                      const valor = metricaParticipacao === "embarques" ? linha.numeroEmbarques : linha.totalDiarias;
+                      const pct = totalParticipacao > 0 ? Math.round((valor / totalParticipacao) * 1000) / 10 : 0;
+                      return (
+                        <div key={linha.empresa} className="flex items-center justify-between text-xs gap-2">
+                          <span className="flex items-center gap-1.5 font-semibold text-navy capitalize truncate">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
+                            {linha.empresa}
+                          </span>
+                          <span className="text-gray-500 whitespace-nowrap">{valor} · {pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
 
             {mostrarEvolucao && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-navy">Evolução mensal · diárias</h3>
+                  <h3 className="text-sm font-bold text-navy">Evolução de embarques por mês</h3>
                   <div className="flex gap-3 text-[11px] text-gray-500">
                     {linhasFiltradas.map((linha) => (
                       <span key={linha.empresa} className="flex items-center gap-1 capitalize">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDaEmpresa(linha.empresa).fg }} />
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
                         {linha.empresa}
                       </span>
                     ))}
@@ -508,7 +564,7 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
                                 <div
                                   title={`${capitalizar(linha.empresa)} — ${ponto.rotulo}: ${valor} diárias`}
                                   className="w-full rounded-t-sm transition-opacity hover:opacity-80"
-                                  style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corDaEmpresa(linha.empresa).fg }}
+                                  style={{ height: `${Math.max(alturaPct, valor > 0 ? 3 : 0)}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }}
                                 />
                               </div>
                             );
@@ -522,29 +578,28 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
               </div>
             )}
 
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-bold text-navy mb-3">Saúde da execução</h3>
+            <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
+              <h3 className="text-sm font-bold text-navy mb-3">Saúde da execução (qualidade)</h3>
               <div className="flex flex-col gap-3.5">
                 {linhasFiltradas.map((linha) => {
-                  const saude = saudeDaLinha(linha);
                   return (
                     <div key={linha.empresa}>
                       <div className="flex items-center justify-between text-xs font-bold text-navy mb-1.5">
                         <span className="flex items-center gap-1.5 capitalize">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corDaEmpresa(linha.empresa).fg }} />
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
                           {linha.empresa}
+                          <span className="font-normal text-gray-400 normal-case">
+                            · {linha.numeroEmbarques} embarque{linha.numeroEmbarques === 1 ? "" : "s"}
+                          </span>
                         </span>
                         <span>{linha.percentualMedio !== null ? `${linha.percentualMedio}%` : "-"}</span>
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-gray-100 overflow-hidden mb-1.5">
-                        <div
-                          className={`h-full rounded-full ${saude.classe === "bom" ? "bg-verde" : "bg-amarelo"}`}
-                          style={{ width: `${linha.percentualMedio ?? 0}%` }}
-                        />
+                        <div className="h-full rounded-full bg-verde" style={{ width: `${linha.percentualMedio ?? 0}%` }} />
                       </div>
                       <div className="flex gap-2.5 flex-wrap text-[10.5px] text-gray-400 mb-1.5">
-                        {linha.completos > 0 && <span>● {linha.completos} completo{linha.completos === 1 ? "" : "s"}</span>}
-                        {linha.comPendencia > 0 && <span>● {linha.comPendencia} com pendência</span>}
+                        {linha.completos > 0 && <span>✓ {linha.completos} completo{linha.completos === 1 ? "" : "s"}</span>}
+                        {linha.comPendencia > 0 && <span>⚠ {linha.comPendencia} com pendência</span>}
                         {linha.ativos > 0 && <span>● {linha.ativos} em andamento</span>}
                       </div>
                       <BadgeSaude linha={linha} />
@@ -556,54 +611,113 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
           </div>
 
           {/* Comparativo por empresa · Principais insights */}
-          <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: "1.7fr 1fr" }}>
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+          <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: "minmax(0, 3.3fr) minmax(0, 1fr)" }}>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm min-w-0">
               <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Embarques</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Situação</th>
-                    <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Colab.</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias/colab.</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Dias/embarque</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">% médio</th>
-                    <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Saúde</th>
-                    <th className="py-3 px-4"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {linhasFiltradas.map((linha) => (
-                    <LinhaTabela key={linha.empresa} linha={linha} maiorDiarias={maiorDiarias} />
-                  ))}
-                </tbody>
-              </table>
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-[#eef1f6]">
+                      <th className="py-3 px-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Embarques</th>
+                      <th className="py-3 px-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Colab.</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Diárias/colab.</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Média/embarque</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">% médio</th>
+                      <th className="py-3 px-2 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Saúde</th>
+                      <th className="py-3 px-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linhasFiltradas.map((linha) => (
+                      <LinhaTabela key={linha.empresa} linha={linha} maiorDiarias={maiorDiarias} />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-bold text-navy mb-3">Principais insights</h3>
-              {insights.length === 0 ? (
-                <p className="text-xs text-gray-400">Sem destaques pra esse recorte ainda.</p>
-              ) : (
-                <div className="flex flex-col gap-3.5">
-                  {insights.map((insight, i) => (
-                    <div key={i} className="flex gap-2.5">
-                      <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-sm ${
-                        insight.tipo === "up" ? "bg-verde/10" : insight.tipo === "alerta" ? "bg-amarelo/10" : "bg-azul/10"
-                      }`}>
-                        {insight.icone}
-                      </span>
-                      <div>
-                        <p className="text-xs font-bold text-navy mb-0.5">{insight.titulo}</p>
-                        <p className="text-[11.5px] text-gray-500 leading-relaxed">{insight.descricao}</p>
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm min-w-0">
+              <div className="bg-navy px-4 py-3">
+                <h3 className="text-sm font-bold text-white">Principais insights do período</h3>
+              </div>
+              <div className="p-4">
+                {insights.length === 0 ? (
+                  <p className="text-xs text-gray-400">Sem destaques pra esse recorte ainda.</p>
+                ) : (
+                  <div className="flex flex-col gap-3.5">
+                    {insights.map((insight, i) => (
+                      <div key={i} className="flex gap-2.5">
+                        <span className={`w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-sm ${
+                          insight.tipo === "up" ? "bg-verde/10" : insight.tipo === "alerta" ? "bg-amarelo/10" : "bg-azul/10"
+                        }`}>
+                          {insight.icone}
+                        </span>
+                        <div>
+                          <p className="text-xs font-bold text-navy mb-0.5">{insight.titulo}</p>
+                          <p className="text-[11.5px] text-gray-500 leading-relaxed">{insight.descricao}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Diárias por empresa · Participação de diárias (sempre por diárias, sem alternância) */}
+          <div className="grid gap-4 mb-5" style={{ gridTemplateColumns: "minmax(0, 1.6fr) minmax(0, 1fr)" }}>
+            <div className="bg-white border border-gray-200 rounded-lg p-4 min-w-0">
+              <h3 className="text-sm font-bold text-navy mb-4">Diárias por empresa</h3>
+              <div className="flex flex-col gap-4">
+                {linhasFiltradas.map((linha) => {
+                  const pct = totalDiariasParticipacao > 0
+                    ? Math.round((linha.totalDiarias / totalDiariasParticipacao) * 1000) / 10
+                    : 0;
+                  const propor = maiorDiarias > 0 ? (linha.totalDiarias / maiorDiarias) * 100 : 0;
+                  return (
+                    <div key={linha.empresa}>
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="flex items-center gap-1.5 font-semibold text-navy capitalize">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
+                          {linha.empresa}
+                        </span>
+                        <span className="text-gray-500">{linha.totalDiarias} diárias · {pct}%</span>
+                      </div>
+                      <div className="w-full h-3 rounded-full bg-gray-100 overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${propor}%`, backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col items-center justify-center min-w-0">
+              <h3 className="text-sm font-bold text-navy mb-3 self-start">Participação de diárias</h3>
+              <DonutChart
+                tamanho={132}
+                espessura={18}
+                segmentos={linhasFiltradas.map((l) => ({ empresa: l.empresa, valor: l.totalDiarias, cor: corPrincipalEmpresa(l.empresa) }))}
+                rotuloCentro={String(totalDiariasParticipacao)}
+                legendaCentro="diárias"
+              />
+              <div className="flex flex-col gap-1.5 mt-3 w-full">
+                {linhasFiltradas.map((linha) => {
+                  const pct = totalDiariasParticipacao > 0
+                    ? Math.round((linha.totalDiarias / totalDiariasParticipacao) * 1000) / 10
+                    : 0;
+                  return (
+                    <div key={linha.empresa} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-1.5 font-semibold text-navy capitalize">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: corPrincipalEmpresa(linha.empresa) }} />
+                        {linha.empresa}
+                      </span>
+                      <span className="text-gray-500">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -625,8 +739,8 @@ export function RelatorioEmpresasConteudo({ empresasCadastradas }: { empresasCad
           <p className="text-xs text-gray-400">
             &quot;Diárias&quot; conta só os dias de cada embarque que realmente caem dentro do período mostrado - se um
             embarque atravessa a virada, cada período fica só com a parte real dele. &quot;Embarques&quot; conta só os que
-            começaram dentro desse período. Os insights ao lado da tabela são gerados por regra simples em cima
-            desses números (sem IA rodando a cada carregamento) e se ajustam sozinhos pra 1 empresa selecionada ou várias.
+            começaram dentro desse período. Os insights são gerados por regra simples em cima desses números (sem IA
+            rodando a cada carregamento) e se ajustam sozinhos pra 1 empresa selecionada ou várias.
           </p>
         </>
       )}
