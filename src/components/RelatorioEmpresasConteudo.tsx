@@ -149,7 +149,7 @@ function CardSaudeEmpresa({ linha }: { linha: LinhaRelatorioEmpresa }) {
       <div className="flex items-center gap-6 mb-4">
         <DonutChart
           tamanho={104}
-          espessura={14}
+          espessura={8}
           segmentos={[
             { empresa: "concluidos", valor: linha.completos, cor: "#639922" },
             { empresa: "resto", valor: Math.max(linha.numeroEmbarques - linha.completos, 0), cor: "#e8ecf1" },
