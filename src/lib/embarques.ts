@@ -19,6 +19,15 @@ export type Embarque = {
   id: string;
   obra_id: string;
   obra_nome: string | null;
+  // 27/11: identidade ESTÁVEL do colaborador - ao contrário de
+  // `efetivo_nome` (que é só um retrato de como a pessoa se chamava NA
+  // ÉPOCA desse embarque, nunca muda depois de gravado), esse campo
+  // aponta sempre pro mesmo colaborador mesmo que o nome dele seja
+  // corrigido/mudado depois. Usar isso (não o nome) pra agrupar/contar
+  // "a mesma pessoa" em relatórios - ver bug do "2 Gustavos" no
+  // histórico (TabelaHistorico.tsx) e a contagem de "colaboradores
+  // distintos" em relatorios.ts.
+  colaborador_id: string | null;
   efetivo_nome: string | null;
   efetivo_funcao: string | null;
   data_inicio: string | null;
@@ -424,7 +433,7 @@ export async function buscarEmpresasCadastradas(): Promise<string[]> {
 }
 
 const COLUNAS_EMBARQUES =
-  "id::text, obra_id::text, obra_nome, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
+  "id::text, obra_id::text, obra_nome, colaborador_id::text, efetivo_nome, efetivo_funcao, data_inicio, data_fim, ativo, " +
   "status_final, justificativa_encerramento, recado_dia, recado_dia_atualizado_em";
 const COLUNAS_OBRAS =
   "id::text, nome, empresa, local_flotel, local_codigo, prefixo_rdo, data_desembarque_prevista, gm_codigo, md_codigo";
