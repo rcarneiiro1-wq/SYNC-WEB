@@ -335,12 +335,33 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
 
   const grupos = useMemo(() => {
     if (!agruparPorPessoa) return null;
-    const mapa = new Map<string, LinhaHistorico[]>();
+    // 27/11: agrupa pelo colaborador_id (identidade estável), não pelo
+    // texto de efetivo_nome - esse é só um retrato de como a pessoa se
+    // chamava NA ÉPOCA de cada embarque, nunca muda depois de gravado.
+    // Agrupando pelo nome, renomear alguém (ex: corrigir "Gustavo" pra
+    // "Gustavo Ricardo") fazia o sistema achar que eram duas pessoas
+    // diferentes - bug relatado pelo Rafael. Só cai pro nome como chave
+    // em embarque muito antigo, de antes de colaborador_id existir (não
+    // deveria ter nenhum hoje, mas por segurança nunca quebra se aparecer).
+    const mapa = new Map<string, { nomeAtual: string; inicioMaisRecente: string; linhas: LinhaHistorico[] }>();
     for (const linha of linhasOrdenadas) {
-      const nome = linha.embarque.efetivo_nome || "Sem nome";
-      const lista = mapa.get(nome) || [];
-      lista.push(linha);
-      mapa.set(nome, lista);
+      const chave = linha.embarque.colaborador_id || `nome:${linha.embarque.efetivo_nome || "Sem nome"}`;
+      const nomeDessaLinha = linha.embarque.efetivo_nome || "Sem nome";
+      const inicioDessaLinha = linha.inicioReal || "";
+      const grupo = mapa.get(chave);
+      if (!grupo) {
+        mapa.set(chave, { nomeAtual: nomeDessaLinha, inicioMaisRecente: inicioDessaLinha, linhas: [linha] });
+        continue;
+      }
+      grupo.linhas.push(linha);
+      // o nome mostrado no cabeçalho do grupo é sempre o do embarque mais
+      // RECENTE - assim aparece "Gustavo Ricardo" (nome atual), nunca
+      // "Gustavo" (nome antigo), não importa a ordem em que os embarques
+      // foram processados aqui
+      if (inicioDessaLinha > grupo.inicioMaisRecente) {
+        grupo.nomeAtual = nomeDessaLinha;
+        grupo.inicioMaisRecente = inicioDessaLinha;
+      }
     }
     return Array.from(mapa.entries());
   }, [linhasOrdenadas, agruparPorPessoa]);
@@ -424,14 +445,14 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {grupos
-                ? grupos.map(([nome, linhasDoGrupo]) => (
+                ? grupos.map(([chave, grupo]) => (
                     <>
-                      <tr key={`grupo-${nome}`} className="bg-navy/5">
+                      <tr key={`grupo-${chave}`} className="bg-navy/5">
                         <td colSpan={6} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
-                          {nome} <span className="font-normal text-gray-400 normal-case">— {linhasDoGrupo.length} embarque{linhasDoGrupo.length === 1 ? "" : "s"}</span>
+                          {grupo.nomeAtual} <span className="font-normal text-gray-400 normal-case">— {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
                         </td>
                       </tr>
-                      {linhasDoGrupo.map((linha) => renderizarLinha(linha))}
+                      {grupo.linhas.map((linha) => renderizarLinha(linha))}
                     </>
                   ))
                 : linhasOrdenadas.map((linha) => renderizarLinha(linha))}
