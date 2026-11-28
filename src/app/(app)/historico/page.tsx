@@ -9,6 +9,7 @@ import {
 } from "@/lib/embarques";
 import { TabelaHistorico } from "@/components/TabelaHistorico";
 import { FiltroHistorico } from "@/components/FiltroHistorico";
+import { CabecalhoHistorico } from "@/components/CabecalhoHistorico";
 import { NOME_COOKIE_USUARIO, validarCookieSessao } from "@/lib/auth-usuario";
 
 export const dynamic = "force-dynamic"; // sempre busca dado fresco, nunca cacheia
@@ -76,7 +77,7 @@ export default async function PaginaHistorico({
     <div className="min-h-screen">
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <h1 className="text-xl font-bold text-navy mb-6">Histórico de embarques finalizados</h1>
+        <CabecalhoHistorico linhas={linhas} />
 
         <FiltroHistorico
           sugestoes={opcoes.sugestoes}
