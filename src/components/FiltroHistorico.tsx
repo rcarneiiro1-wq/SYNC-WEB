@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SeletorEmpresas } from "@/components/SeletorEmpresas";
+import { Search, Calendar, ChevronDown } from "lucide-react";
 
 type ValoresFiltro = {
   busca: string;
@@ -46,6 +46,13 @@ function ultimoDiaDoMes(mesValor: string): string {
   return `${mesValor}-${String(ultimoDia).padStart(2, "0")}`;
 }
 
+/** Rótulo curto de mês ("Jan", "Fev"...) pro botão de período fechado -
+ * não precisa do nome inteiro ali, só o suficiente pra reconhecer. */
+function rotuloMesCurto(mesValor: string): string {
+  const opcao = OPCOES_MES.find((o) => o.valor === mesValor);
+  return opcao ? opcao.rotulo.slice(0, 3) : mesValor;
+}
+
 export function FiltroHistorico({
   sugestoes,
   empresasCadastradas,
@@ -64,10 +71,33 @@ export function FiltroHistorico({
   const [mesDeAno, setMesDeAno] = useState(valoresIniciais.mesDe.slice(0, 4));
   const [mesAteMes, setMesAteMes] = useState(valoresIniciais.mesAte.slice(5, 7));
   const [mesAteAno, setMesAteAno] = useState(valoresIniciais.mesAte.slice(0, 4));
+  // 28/11 (redesign visual pedido pelo Rafael): o período inteiro (os 4
+  // selects De/Até) agora mora dentro desse popover, fechado por padrão -
+  // a barra de filtro principal só mostra 1 botão resumindo a escolha
+  // ("Todos os períodos" ou "Nov/2026 → ..."), pra caber tudo numa linha só
+  // mesmo quando mais empresas forem cadastradas. O FILTRO em si (os 4
+  // selects, o `buscar()`) continua exatamente igual a antes.
+  const [periodoAberto, setPeriodoAberto] = useState(false);
   const opcoesAno = useMemo(() => gerarOpcoesAno(), []);
+
+  const rotuloPeriodo = useMemo(() => {
+    const de = mesDeMes && mesDeAno ? `${rotuloMesCurto(mesDeMes)}/${mesDeAno}` : null;
+    const ate = mesAteMes && mesAteAno ? `${rotuloMesCurto(mesAteMes)}/${mesAteAno}` : null;
+    if (!de && !ate) return "Todos os períodos";
+    if (de && ate) return de === ate ? de : `${de} → ${ate}`;
+    return de || ate || "Todos os períodos";
+  }, [mesDeMes, mesDeAno, mesAteMes, mesAteAno]);
+
+  function alternarEmpresa(empresa: string) {
+    const novas = new Set(empresas);
+    if (novas.has(empresa)) novas.delete(empresa);
+    else novas.add(empresa);
+    setEmpresas(novas);
+  }
 
   function buscar(e: React.FormEvent) {
     e.preventDefault();
+    setPeriodoAberto(false);
     const params = new URLSearchParams();
     if (busca) params.set("busca", busca);
     for (const empresa of empresas) params.append("empresa", empresa);
@@ -86,127 +116,166 @@ export function FiltroHistorico({
     setMesDeAno("");
     setMesAteMes("");
     setMesAteAno("");
+    setPeriodoAberto(false);
     router.push("/historico");
   }
 
   return (
     <form
       onSubmit={buscar}
-      className="bg-white border border-gray-200 rounded-lg p-4 mb-6 flex flex-col gap-4"
+      className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6 flex flex-wrap items-end gap-3"
     >
-      <SeletorEmpresas empresas={empresasCadastradas} selecionadas={empresas} aoMudar={setEmpresas} />
-
-      <div className="flex flex-wrap items-end gap-4">
+      {empresasCadastradas.length > 0 && (
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-busca">
-            Buscar (nome, plataforma, código, MD ou GM)
-          </label>
-          <div className="relative w-72">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"
-            >
-              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-              <path d="M21 21l-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            <input
-              id="filtro-busca"
-              list="lista-sugestoes-historico"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Ex: Eduardo, MV-33, GM..."
-              className="border border-gray-300 rounded-md pl-7 pr-3 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
-            />
-          </div>
-          <datalist id="lista-sugestoes-historico">
-            {sugestoes.map((texto) => (
-              <option key={texto} value={texto} />
-            ))}
-          </datalist>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-mes-de">
-            De
-          </label>
-          <div className="flex gap-1.5">
-            <select
-              id="filtro-mes-de"
-              value={mesDeMes}
-              onChange={(e) => setMesDeMes(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-            >
-              <option value="">Mês</option>
-              {OPCOES_MES.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
-            <select
-              value={mesDeAno}
-              onChange={(e) => setMesDeAno(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-            >
-              <option value="">Ano</option>
-              {opcoesAno.map((ano) => (
-                <option key={ano} value={ano}>
-                  {ano}
-                </option>
-              ))}
-            </select>
+          <span className="text-xs text-gray-500 font-medium">Empresa</span>
+          <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
+            {empresasCadastradas.map((empresa, indice) => {
+              const ativa = empresas.has(empresa);
+              return (
+                <button
+                  key={empresa}
+                  type="button"
+                  onClick={() => alternarEmpresa(empresa)}
+                  aria-pressed={ativa}
+                  className={`px-3.5 py-2 text-sm font-semibold capitalize cursor-pointer transition-colors whitespace-nowrap ${
+                    indice > 0 ? "border-l border-gray-200" : ""
+                  } ${ativa ? "bg-navy text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                >
+                  {empresa}
+                </button>
+              );
+            })}
           </div>
         </div>
+      )}
 
-        <div className="flex flex-col gap-1">
-          <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-mes-ate">
-            Até
-          </label>
-          <div className="flex gap-1.5">
-            <select
-              id="filtro-mes-ate"
-              value={mesAteMes}
-              onChange={(e) => setMesAteMes(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
+      <div className="flex flex-col gap-1 flex-1 min-w-[240px]">
+        <label className="text-xs text-gray-500 font-medium" htmlFor="filtro-busca">
+          Buscar
+        </label>
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            id="filtro-busca"
+            list="lista-sugestoes-historico"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar colaborador, plataforma, código, MD ou GM..."
+            className="border border-gray-300 rounded-md pl-9 pr-3 py-2 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
+          />
+        </div>
+        <datalist id="lista-sugestoes-historico">
+          {sugestoes.map((texto) => (
+            <option key={texto} value={texto} />
+          ))}
+        </datalist>
+      </div>
+
+      <div className="relative flex flex-col gap-1">
+        <span className="text-xs text-gray-500 font-medium">Período</span>
+        <button
+          type="button"
+          onClick={() => setPeriodoAberto((v) => !v)}
+          className="flex items-center gap-2 border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 hover:border-azul cursor-pointer whitespace-nowrap"
+        >
+          <Calendar size={14} className="text-gray-400 shrink-0" />
+          {rotuloPeriodo}
+          <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform ${periodoAberto ? "rotate-180" : ""}`} />
+        </button>
+
+        {periodoAberto && (
+          <div className="absolute z-10 top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg p-4 flex flex-col gap-3 w-[300px]">
+            <div className="flex items-end gap-2">
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-gray-500 font-medium">De - Mês</label>
+                <select
+                  value={mesDeMes}
+                  onChange={(e) => setMesDeMes(e.target.value)}
+                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
+                >
+                  <option value="">Mês</option>
+                  {OPCOES_MES.map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 w-24">
+                <label className="text-xs text-gray-500 font-medium">Ano</label>
+                <select
+                  value={mesDeAno}
+                  onChange={(e) => setMesDeAno(e.target.value)}
+                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
+                >
+                  <option value="">Ano</option>
+                  {opcoesAno.map((ano) => (
+                    <option key={ano} value={ano}>
+                      {ano}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-end gap-2">
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs text-gray-500 font-medium">Até - Mês</label>
+                <select
+                  value={mesAteMes}
+                  onChange={(e) => setMesAteMes(e.target.value)}
+                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
+                >
+                  <option value="">Mês</option>
+                  {OPCOES_MES.map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1 w-24">
+                <label className="text-xs text-gray-500 font-medium">Ano</label>
+                <select
+                  value={mesAteAno}
+                  onChange={(e) => setMesAteAno(e.target.value)}
+                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-azul"
+                >
+                  <option value="">Ano</option>
+                  {opcoesAno.map((ano) => (
+                    <option key={ano} value={ano}>
+                      {ano}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPeriodoAberto(false)}
+              className="self-end text-xs font-semibold text-azul hover:underline cursor-pointer"
             >
-              <option value="">Mês</option>
-              {OPCOES_MES.map((o) => (
-                <option key={o.valor} value={o.valor}>
-                  {o.rotulo}
-                </option>
-              ))}
-            </select>
-            <select
-              value={mesAteAno}
-              onChange={(e) => setMesAteAno(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-azul"
-            >
-              <option value="">Ano</option>
-              {opcoesAno.map((ano) => (
-                <option key={ano} value={ano}>
-                  {ano}
-                </option>
-              ))}
-            </select>
+              Fechar
+            </button>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="bg-azul text-white text-sm font-medium px-4 py-1.5 rounded-md hover:bg-azul-escuro cursor-pointer"
-          >
-            🔍 Buscar
-          </button>
-          <button
-            type="button"
-            onClick={limpar}
-            className="text-sm text-gray-500 hover:text-gray-700 px-2 cursor-pointer"
-          >
-            Limpar
-          </button>
-        </div>
+      <div className="flex gap-2 ml-auto">
+        <button
+          type="submit"
+          className="flex items-center gap-1.5 bg-navy text-white text-sm font-semibold px-4 py-2 rounded-md hover:bg-navy-light transition-colors cursor-pointer whitespace-nowrap"
+        >
+          <Search size={14} /> Buscar
+        </button>
+        <button
+          type="button"
+          onClick={limpar}
+          className="text-sm text-gray-500 hover:text-gray-700 px-2 cursor-pointer whitespace-nowrap"
+        >
+          Limpar
+        </button>
       </div>
     </form>
   );

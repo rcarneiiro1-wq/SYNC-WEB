@@ -1,11 +1,26 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { formatarDataBr, normalizarBusca, type LinhaHistorico, type ItensPorStatus, type Obra } from "@/lib/embarques";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { formatarDataBr, normalizarBusca, type LinhaHistorico, type Obra } from "@/lib/embarques";
 import { montarNomeArquivoRdo } from "@/lib/nomeArquivo";
 import { urlDownloadArquivo, baixarTodosComoZip } from "@/lib/download";
 import { SecaoAnexos } from "@/components/SecaoAnexos";
 import { corDaEmpresa } from "@/components/SeletorEmpresas";
+import {
+  Ship, FileText, Clock, CheckCircle2, Calendar, MapPin,
+  ChevronRight, ChevronDown, ChevronLeft, Layers,
+} from "lucide-react";
+
+/** 28/11 (redesign visual pedido pelo Rafael, com mockup/spec de referência):
+ * mesmo algoritmo de iniciais já usado em outras telas do sistema
+ * (Sidebar.tsx, PainelVencimentos.tsx, GruposRdoLista.tsx) - duplicado aqui
+ * de propósito, igual nos outros lugares (é só 3 linhas, não compensa
+ * compartilhar e criar acoplamento entre arquivos de áreas diferentes). */
+function iniciaisDoNome(nome: string): string {
+  const partes = nome.trim().split(/\s+/);
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
 
 function corPercentualBadge(percentual: number | null): string {
   if (percentual === null) return "bg-gray-100 text-gray-400";
@@ -14,20 +29,7 @@ function corPercentualBadge(percentual: number | null): string {
   return "bg-vermelho/15 text-vermelho";
 }
 
-function ResumoItens({ itensAvanco }: { itensAvanco: ItensPorStatus }) {
-  const { concluido, em_andamento, a_iniciar } = itensAvanco;
-  const total = concluido.length + em_andamento.length + a_iniciar.length;
-  if (total === 0) return <span className="text-gray-300 text-xs">sem itens</span>;
-  return (
-    <div className="flex gap-1.5 text-xs">
-      {concluido.length > 0 && <span className="text-verde font-medium">✓{concluido.length}</span>}
-      {em_andamento.length > 0 && <span className="text-amarelo font-medium">●{em_andamento.length}</span>}
-      {a_iniciar.length > 0 && <span className="text-gray-400 font-medium">○{a_iniciar.length}</span>}
-    </div>
-  );
-}
-
-type ColunaOrdenavel = "nome" | "empresa" | "periodo" | "dias" | "pendencias" | "percentual";
+type ColunaOrdenavel = "nome" | "empresa" | "periodo" | "dias" | "rdos" | "pendencias" | "percentual";
 
 /** Pequena bolinha colorida + texto - mesma linguagem visual dos cards de
  * empresa (SeletorEmpresas) e do Comparativo entre colaboradores, pra
@@ -37,7 +39,7 @@ function EtiquetaEmpresa({ empresa }: { empresa: string | null | undefined }) {
   if (!empresa) return <span className="text-gray-300 text-xs">-</span>;
   const cor = corDaEmpresa(empresa);
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap" style={{ color: cor.fg }}>
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold capitalize whitespace-nowrap" style={{ color: cor.fg }}>
       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor.fg }} />
       {empresa}
     </span>
@@ -47,6 +49,25 @@ function EtiquetaEmpresa({ empresa }: { empresa: string | null | undefined }) {
 function IconeOrdenacao({ ativa, asc }: { ativa: boolean; asc: boolean }) {
   if (!ativa) return <span className="text-gray-300 ml-1">↕</span>;
   return <span className="text-azul ml-1">{asc ? "↑" : "↓"}</span>;
+}
+
+/** Card de indicador (seção 4 do pedido de redesign) - ícone num quadrado
+ * colorido + número em destaque + rótulo embaixo, sem gráfico/decoração
+ * nenhuma dentro, igual pedido. */
+function CardKpi({
+  icone, corIcone, valor, rotulo,
+}: {
+  icone: ReactNode; corIcone: string; valor: string | number; rotulo: string;
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg px-4 py-3.5 shadow-sm flex items-center gap-3">
+      <span className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${corIcone}`}>{icone}</span>
+      <div>
+        <p className="text-xl font-bold text-navy leading-tight">{valor}</p>
+        <p className="text-xs text-gray-400 leading-tight mt-0.5">{rotulo}</p>
+      </div>
+    </div>
+  );
 }
 
 function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
@@ -74,14 +95,33 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
 
   return (
     <tr>
-      <td colSpan={7} className="bg-gray-50 px-6 py-4 border-b border-gray-100">
-        <div className="grid sm:grid-cols-2 gap-6">
-          <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Itens do escopo</p>
+      <td colSpan={8} className="bg-azul/[0.04] px-6 py-5 border-b border-gray-100">
+        {/* 28/11: resumo (nome / plataforma / período / RDOs) pedido no
+         * redesign - a plataforma saiu da linha fechada (lá agora mostra a
+         * FUNÇÃO do colaborador, não a obra) e voltou a aparecer bem aqui
+         * em cima, junto do resto do contexto do embarque. */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-gray-500 mb-4 pb-4 border-b border-gray-200">
+          <span className="text-sm font-semibold text-navy">{nomeColaborador}</span>
+          <span className="flex items-center gap-1.5">
+            <MapPin size={12} className="text-gray-400" /> {obra?.nome || embarque.obra_nome || "-"}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Calendar size={12} className="text-gray-400" /> {formatarDataBr(linha.inicioReal)} → {formatarDataBr(linha.fimReal)}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <FileText size={12} className="text-gray-400" /> {rdos.length} RDO{rdos.length === 1 ? "" : "s"} lançados
+          </span>
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+              <Layers size={13} className="text-azul" /> Itens do escopo
+            </p>
             {itensAvanco.concluido.length + itensAvanco.em_andamento.length + itensAvanco.a_iniciar.length === 0 ? (
               <p className="text-xs text-gray-400">Nenhum item registrado.</p>
             ) : (
-              <div className="flex flex-col gap-1 text-sm">
+              <div className="flex flex-col gap-1.5 text-sm">
                 {itensAvanco.concluido.map((item) => (
                   <span key={item} className="text-verde">✓ {item}</span>
                 ))}
@@ -155,10 +195,10 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
             )}
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                RDOs lançados ({rdos.length})
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <FileText size={13} className="text-azul" /> RDOs lançados ({rdos.length})
               </p>
               {rdosComPdf.length > 1 && (
                 <button
@@ -177,7 +217,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
             ) : (
               <div className="flex flex-col gap-1">
                 {rdos.map((rdo) => (
-                  <div key={rdo.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border border-gray-100">
+                  <div key={rdo.id} className="flex items-center justify-between text-sm bg-gray-50 rounded px-3 py-1.5 border border-gray-100">
                     <span className="text-gray-600">
                       RDO {String(rdo.numeroRdo).padStart(3, "0")} — {formatarDataBr(rdo.data)}
                     </span>
@@ -214,42 +254,52 @@ function LinhaTabela({
 }: {
   linha: LinhaHistorico; par: boolean; expandida: boolean; aoClicar: () => void;
 }) {
-  const { embarque, obra, totalRdos, percentualFinal, dias, pendentes, itensAvanco, inicioReal, fimReal, justificativa } = linha;
+  const { embarque, obra, totalRdos, percentualFinal, dias, pendentes, inicioReal, fimReal } = linha;
 
   return (
     <tr
-      className={`${par ? "bg-gray-50/60" : "bg-white"} hover:bg-azul/5 transition-colors cursor-pointer ${expandida ? "bg-azul/5" : ""}`}
+      className={`${par ? "bg-azul/[0.035]" : "bg-white"} hover:bg-azul/10 transition-colors cursor-pointer ${expandida ? "bg-azul/10" : ""}`}
       onClick={aoClicar}
     >
-      <td className="py-3.5 px-4">
-        <div className="flex items-center gap-2">
-          <span className={`text-gray-300 text-xs transition-transform ${expandida ? "rotate-90" : ""}`}>▶</span>
-          <div>
-            <p className="text-sm font-semibold text-navy leading-tight">{embarque.efetivo_nome || "-"}</p>
-            <p className="text-xs text-gray-400 leading-tight mt-0.5">{obra?.nome || embarque.obra_nome || "-"}</p>
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-3">
+          <span className="w-9 h-9 rounded-full bg-navy text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {iniciaisDoNome(embarque.efetivo_nome || "-")}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-navy leading-tight whitespace-nowrap">{embarque.efetivo_nome || "-"}</p>
+            <p className="text-xs text-gray-400 leading-tight mt-0.5 whitespace-nowrap">{embarque.efetivo_funcao || "-"}</p>
           </div>
         </div>
       </td>
 
-      <td className="py-3.5 px-4">
+      <td className="py-3 px-4">
         <EtiquetaEmpresa empresa={obra?.empresa} />
       </td>
 
-      <td className="py-3.5 px-4 text-sm text-gray-600 whitespace-nowrap">
-        {formatarDataBr(inicioReal)}
-        <span className="text-gray-300 mx-1.5">→</span>
-        {formatarDataBr(fimReal)}
+      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5">
+          <Calendar size={12} className="text-gray-300" />
+          {formatarDataBr(inicioReal)}
+          <span className="text-gray-300">→</span>
+          {formatarDataBr(fimReal)}
+        </span>
       </td>
 
-      <td className="py-3.5 px-4 text-center">
-        <p className="text-sm font-medium text-gray-700">
+      <td className="py-3 px-4 text-center">
+        <span className="text-sm font-bold text-navy">
           {dias ?? "-"}
-          {dias !== null && <span className="text-gray-400 font-normal text-xs"> d</span>}
-        </p>
-        <p className="text-xs text-gray-400">{totalRdos} RDO{totalRdos === 1 ? "" : "s"}</p>
+          {dias !== null && <span className="font-normal text-gray-400 text-xs"> d</span>}
+        </span>
       </td>
 
-      <td className="py-3.5 px-4 text-center">
+      <td className="py-3 px-4 text-center">
+        <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+          <FileText size={13} className="text-gray-300" /> {totalRdos}
+        </span>
+      </td>
+
+      <td className="py-3 px-4 text-center">
         {embarque.status_final === "com_pendencia" ? (
           <span className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
             ⚠ Encerrado com pendência
@@ -270,27 +320,14 @@ function LinhaTabela({
         )}
       </td>
 
-      <td className="py-3.5 px-4 text-center">
+      <td className="py-3 px-4 text-center">
         <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
           {percentualFinal !== null ? `${percentualFinal}%` : "-"}
         </span>
       </td>
 
-      <td className="py-3.5 px-4">
-        <div className="flex items-center gap-2">
-          <ResumoItens itensAvanco={itensAvanco} />
-          {(embarque.justificativa_encerramento || justificativa) && (
-            <span className="text-xs" title="Tem justificativa registrada">📝</span>
-          )}
-          {linha.anexos.length > 0 && (
-            <span
-              className="inline-flex items-center gap-1 bg-azul/10 text-azul text-xs font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap"
-              title={`${linha.anexos.length} relatório(s) assinado(s) anexado(s)`}
-            >
-              📎 {linha.anexos.length}
-            </span>
-          )}
-        </div>
+      <td className="py-3 px-4 text-center">
+        {expandida ? <ChevronDown size={16} className="text-azul inline" /> : <ChevronRight size={16} className="text-gray-300 inline" />}
       </td>
     </tr>
   );
@@ -318,6 +355,11 @@ function CabecalhoOrdenavel({
  * então é uma escolha única, não duas caixinhas independentes). */
 type ModoAgrupamento = "nenhum" | "pessoa" | "plataforma";
 
+/** Paginação (seção 9 do pedido de redesign) - só faz sentido na visão
+ * "Sem agrupamento" (lista plana); nos modos agrupados continua mostrando
+ * tudo, senão um grupo ficaria cortado no meio entre 2 páginas. */
+const TAM_PAGINA = 10;
+
 export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   const [modoAgrupamento, setModoAgrupamento] = useState<ModoAgrupamento>("nenhum");
   const [ordenarPor, setOrdenarPor] = useState<ColunaOrdenavel | null>(null);
@@ -325,6 +367,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   // string, não number: o id do embarque é maior do que o JS consegue
   // representar com precisão como número (ver comentário em embarques.ts)
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
+  const [pagina, setPagina] = useState(1);
 
   const aoClicarColuna = (coluna: ColunaOrdenavel) => {
     if (ordenarPor === coluna) {
@@ -349,6 +392,8 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
           return sinal * (a.inicioReal || "").localeCompare(b.inicioReal || "");
         case "dias":
           return sinal * ((a.dias ?? -1) - (b.dias ?? -1));
+        case "rdos":
+          return sinal * (a.totalRdos - b.totalRdos);
         case "pendencias":
           return sinal * (a.pendentes - b.pendentes);
         case "percentual":
@@ -439,8 +484,19 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     // soma os "dias" (intervalo real coberto pelos RDOs) de cada embarque
     // filtrado - equivale ao total de diárias no período/filtro atual
     const totalDias = linhas.reduce((soma, l) => soma + (l.dias ?? 0), 0);
-    return { total, comPendencia, media, totalDias };
+    const totalRdosLancados = linhas.reduce((soma, l) => soma + l.totalRdos, 0);
+    return { total, comPendencia, media, totalDias, totalRdosLancados };
   }, [linhas]);
+
+  // só vale pro modo "sem agrupamento" - ver comentário em cima de TAM_PAGINA
+  const totalPaginas = Math.max(1, Math.ceil(linhasOrdenadas.length / TAM_PAGINA));
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  const linhasDaPagina = useMemo(
+    () => linhasOrdenadas.slice((paginaAtual - 1) * TAM_PAGINA, paginaAtual * TAM_PAGINA),
+    [linhasOrdenadas, paginaAtual]
+  );
+  const inicioIntervalo = linhasOrdenadas.length === 0 ? 0 : (paginaAtual - 1) * TAM_PAGINA + 1;
+  const fimIntervalo = Math.min(paginaAtual * TAM_PAGINA, linhasOrdenadas.length);
 
   let contadorLinha = 0;
   const renderizarLinha = (linha: LinhaHistorico) => {
@@ -463,28 +519,36 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   return (
     <div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-          <p className="text-2xl font-bold text-navy">{resumo.total}</p>
-          <p className="text-xs text-gray-400">embarque{resumo.total === 1 ? "" : "s"} encontrado{resumo.total === 1 ? "" : "s"}</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-          <p className={`text-2xl font-bold ${resumo.comPendencia > 0 ? "text-amarelo" : "text-navy"}`}>{resumo.comPendencia}</p>
-          <p className="text-xs text-gray-400">com pendência</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-          <p className="text-2xl font-bold text-navy">{resumo.totalDias}</p>
-          <p className="text-xs text-gray-400">diária{resumo.totalDias === 1 ? "" : "s"} no período</p>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-lg px-4 py-3">
-          <p className="text-2xl font-bold text-navy">{resumo.media !== null ? `${resumo.media}%` : "-"}</p>
-          <p className="text-xs text-gray-400">% médio de conclusão</p>
-        </div>
+        <CardKpi
+          icone={<Ship size={16} />}
+          corIcone="bg-azul/10 text-azul"
+          valor={resumo.total}
+          rotulo={`Embarque${resumo.total === 1 ? "" : "s"} finalizado${resumo.total === 1 ? "" : "s"}`}
+        />
+        <CardKpi
+          icone={<FileText size={16} />}
+          corIcone="bg-azul/10 text-azul"
+          valor={resumo.totalRdosLancados}
+          rotulo="RDOs lançados"
+        />
+        <CardKpi
+          icone={<Clock size={16} />}
+          corIcone="bg-azul/10 text-azul"
+          valor={resumo.totalDias}
+          rotulo={`Diária${resumo.totalDias === 1 ? "" : "s"} registrada${resumo.totalDias === 1 ? "" : "s"}`}
+        />
+        <CardKpi
+          icone={<CheckCircle2 size={16} />}
+          corIcone="bg-verde/10 text-verde"
+          valor={resumo.media !== null ? `${resumo.media}%` : "-"}
+          rotulo="Taxa de conclusão"
+        />
       </div>
 
       {resumo.total > 0 && (
         <div
-          className={`flex items-start gap-2 rounded-lg px-4 py-3 mb-5 text-sm ${
-            resumo.comPendencia === 0 ? "bg-verde/10 text-verde" : "bg-amarelo/10 text-amarelo"
+          className={`flex items-start gap-2 rounded-lg px-4 py-3 mb-5 text-sm border ${
+            resumo.comPendencia === 0 ? "bg-verde/10 text-verde border-verde/20" : "bg-amarelo/10 text-amarelo border-amarelo/20"
           }`}
         >
           <span className="mt-px">{resumo.comPendencia === 0 ? "✓" : "⚠"}</span>
@@ -541,26 +605,17 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-sm">
-          <table className="w-full min-w-[860px]">
+          <table className="w-full min-w-[1020px]">
             <thead>
-              <tr className="border-b border-gray-200">
+              <tr className="bg-azul/[0.04] border-b border-gray-200">
                 <CabecalhoOrdenavel label="Colaborador" coluna="nome" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Empresa" coluna="empresa" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Período" coluna="periodo" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Duração" coluna="dias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <CabecalhoOrdenavel label="Pendências" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <CabecalhoOrdenavel label="% Final" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <th className="py-3 px-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  <span className="inline-flex items-center gap-1">
-                    O que foi feito
-                    <span
-                      className="text-gray-300 cursor-help normal-case font-normal"
-                      title="✓ = itens concluídos · ● = em andamento · ○ = a iniciar · 📝 = tem justificativa registrada · 📎 = relatório assinado anexado"
-                    >
-                      ⓘ
-                    </span>
-                  </span>
-                </th>
+                <CabecalhoOrdenavel label="RDOs" coluna="rdos" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <CabecalhoOrdenavel label="Status" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <CabecalhoOrdenavel label="Conclusão" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
+                <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -568,7 +623,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                 ? gruposPorPessoa.map(([chave, grupo]) => (
                     <Fragment key={`grupo-${chave}`}>
                       <tr className="bg-navy/5">
-                        <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                        <td colSpan={8} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                           {grupo.nomeAtual} <span className="font-normal text-gray-400 normal-case">— {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
                         </td>
                       </tr>
@@ -582,7 +637,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                     return (
                       <Fragment key={`grupo-${chave}`}>
                         <tr className="bg-navy/5">
-                          <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                          <td colSpan={8} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                             <span className="inline-flex items-center gap-1.5">
                               {cor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />}
                               {obra?.nome || obra?.local_codigo || "Sem plataforma"}
@@ -597,9 +652,38 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                       </Fragment>
                     );
                   })
-                : linhasOrdenadas.map((linha) => renderizarLinha(linha))}
+                : linhasDaPagina.map((linha) => renderizarLinha(linha))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {modoAgrupamento === "nenhum" && linhasOrdenadas.length > 0 && (
+        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
+          <p>
+            Exibindo {inicioIntervalo}–{fimIntervalo} de {linhasOrdenadas.length} registro{linhasOrdenadas.length === 1 ? "" : "s"}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={paginaAtual === 1}
+              onClick={() => setPagina(paginaAtual - 1)}
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="w-7 h-7 flex items-center justify-center rounded-md bg-navy text-white text-xs font-bold">
+              {paginaAtual}
+            </span>
+            <button
+              type="button"
+              disabled={paginaAtual === totalPaginas}
+              onClick={() => setPagina(paginaAtual + 1)}
+              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       )}
 
