@@ -22,6 +22,16 @@ function iniciaisDoNome(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
+/** 28/11 (pedido do Rafael pra encurtar a tabela, sem barra de rolagem
+ * horizontal): mesma data de `formatarDataBr`, só que com o ano em 2
+ * dígitos ("10/11/26" em vez de "10/11/2026") - só na LINHA fechada da
+ * tabela (tudo que já estava em dia inteiro - CSV, linha expandida,
+ * filtro - continua com `formatarDataBr` normal, ano completo). */
+function formatarDataCurta(data: string | null): string {
+  const completa = formatarDataBr(data);
+  return completa.replace(/\/(\d{2})(\d{2})$/, "/$2");
+}
+
 function corPercentualBadge(percentual: number | null): string {
   if (percentual === null) return "bg-gray-100 text-gray-400";
   if (percentual >= 70) return "bg-verde/15 text-verde";
@@ -95,7 +105,7 @@ function LinhaExpandida({ linha }: { linha: LinhaHistorico }) {
 
   return (
     <tr>
-      <td colSpan={8} className="bg-azul/[0.04] px-6 py-5 border-b border-gray-100">
+      <td colSpan={7} className="bg-azul/[0.04] px-6 py-5 border-b border-gray-100">
         {/* 28/11: resumo (nome / plataforma / período / RDOs) pedido no
          * redesign - a plataforma saiu da linha fechada (lá agora mostra a
          * FUNÇÃO do colaborador, não a obra) e voltou a aparecer bem aqui
@@ -278,31 +288,33 @@ function LinhaTabela({
       </td>
 
       <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
-        <span className="inline-flex items-center gap-1.5">
-          <Calendar size={12} className="text-gray-300" />
-          {formatarDataBr(inicioReal)}
+        <span className="inline-flex items-center gap-1">
+          {formatarDataCurta(inicioReal)}
           <span className="text-gray-300">→</span>
-          {formatarDataBr(fimReal)}
+          {formatarDataCurta(fimReal)}
         </span>
       </td>
 
-      <td className="py-3 px-4 text-center">
+      <td className="py-3 px-2 text-center">
         <span className="text-sm font-bold text-navy">
           {dias ?? "-"}
           {dias !== null && <span className="font-normal text-gray-400 text-xs"> d</span>}
         </span>
       </td>
 
-      <td className="py-3 px-4 text-center">
-        <span className="inline-flex items-center gap-1.5 text-sm text-gray-600">
+      <td className="py-3 px-2 text-center">
+        <span className="inline-flex items-center gap-1 text-sm text-gray-600">
           <FileText size={13} className="text-gray-300" /> {totalRdos}
         </span>
       </td>
 
-      <td className="py-3 px-4 text-center">
+      <td className="py-3 px-2 text-center">
         {embarque.status_final === "com_pendencia" ? (
-          <span className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
-            ⚠ Encerrado com pendência
+          <span
+            className="inline-flex items-center gap-1 bg-amarelo/10 text-amarelo text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap"
+            title="Encerrado com pendência"
+          >
+            ⚠ Pendência
           </span>
         ) : embarque.status_final === "completo" ? (
           <span className="inline-flex items-center gap-1 bg-verde/10 text-verde text-xs font-semibold px-2 py-1 rounded-full whitespace-nowrap">
@@ -311,37 +323,36 @@ function LinhaTabela({
         ) : pendentes > 0 ? (
           <span
             className="inline-flex items-center gap-1 bg-gray-100 text-gray-500 text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap"
-            title="Embarque antigo, sem essa informação registrada - calculado só pela diferença entre dias e RDOs"
+            title={`Embarque antigo, sem essa informação registrada - calculado só pela diferença entre dias e RDOs (${pendentes} dia${pendentes === 1 ? "" : "s"} sem RDO)`}
           >
-            ⚠ {pendentes} dia{pendentes === 1 ? "" : "s"} sem RDO
+            ⚠ {pendentes}d sem RDO
           </span>
         ) : (
           <span className="text-gray-300 text-xs">em dia</span>
         )}
       </td>
 
-      <td className="py-3 px-4 text-center">
-        <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
-          {percentualFinal !== null ? `${percentualFinal}%` : "-"}
+      <td className="py-3 px-2 text-center">
+        <span className="inline-flex items-center justify-center gap-1">
+          <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-full ${corPercentualBadge(percentualFinal)}`}>
+            {percentualFinal !== null ? `${percentualFinal}%` : "-"}
+          </span>
+          {expandida ? <ChevronDown size={14} className="text-azul shrink-0" /> : <ChevronRight size={14} className="text-gray-300 shrink-0" />}
         </span>
-      </td>
-
-      <td className="py-3 px-4 text-center">
-        {expandida ? <ChevronDown size={16} className="text-azul inline" /> : <ChevronRight size={16} className="text-gray-300 inline" />}
       </td>
     </tr>
   );
 }
 
 function CabecalhoOrdenavel({
-  label, coluna, ordenarPor, ordemAsc, aoClicar, alinhamento = "left",
+  label, coluna, ordenarPor, ordemAsc, aoClicar, alinhamento = "left", compacto = false,
 }: {
   label: string; coluna: ColunaOrdenavel; ordenarPor: ColunaOrdenavel | null; ordemAsc: boolean;
-  aoClicar: (c: ColunaOrdenavel) => void; alinhamento?: "left" | "center";
+  aoClicar: (c: ColunaOrdenavel) => void; alinhamento?: "left" | "center"; compacto?: boolean;
 }) {
   return (
     <th
-      className={`py-3 px-4 text-${alinhamento} text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-navy`}
+      className={`py-3 ${compacto ? "px-2" : "px-4"} text-${alinhamento} text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-navy whitespace-nowrap`}
       onClick={() => aoClicar(coluna)}
     >
       {label}
@@ -357,8 +368,11 @@ type ModoAgrupamento = "nenhum" | "pessoa" | "plataforma";
 
 /** Paginação (seção 9 do pedido de redesign) - só faz sentido na visão
  * "Sem agrupamento" (lista plana); nos modos agrupados continua mostrando
- * tudo, senão um grupo ficaria cortado no meio entre 2 páginas. */
-const TAM_PAGINA = 10;
+ * tudo, senão um grupo ficaria cortado no meio entre 2 páginas.
+ *
+ * 28/11: Rafael achou 10 por página pouco - virou um tamanho ESCOLHIDO por
+ * ele (seletor "Por página"), não mais fixo; 20 é só o valor inicial. */
+const OPCOES_TAM_PAGINA = [20, 30, 50, 100];
 
 export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   const [modoAgrupamento, setModoAgrupamento] = useState<ModoAgrupamento>("nenhum");
@@ -368,6 +382,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
   // representar com precisão como número (ver comentário em embarques.ts)
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
   const [pagina, setPagina] = useState(1);
+  const [tamPagina, setTamPagina] = useState(OPCOES_TAM_PAGINA[0]);
 
   const aoClicarColuna = (coluna: ColunaOrdenavel) => {
     if (ordenarPor === coluna) {
@@ -488,15 +503,15 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
     return { total, comPendencia, media, totalDias, totalRdosLancados };
   }, [linhas]);
 
-  // só vale pro modo "sem agrupamento" - ver comentário em cima de TAM_PAGINA
-  const totalPaginas = Math.max(1, Math.ceil(linhasOrdenadas.length / TAM_PAGINA));
+  // só vale pro modo "sem agrupamento" - ver comentário em cima de OPCOES_TAM_PAGINA
+  const totalPaginas = Math.max(1, Math.ceil(linhasOrdenadas.length / tamPagina));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const linhasDaPagina = useMemo(
-    () => linhasOrdenadas.slice((paginaAtual - 1) * TAM_PAGINA, paginaAtual * TAM_PAGINA),
-    [linhasOrdenadas, paginaAtual]
+    () => linhasOrdenadas.slice((paginaAtual - 1) * tamPagina, paginaAtual * tamPagina),
+    [linhasOrdenadas, paginaAtual, tamPagina]
   );
-  const inicioIntervalo = linhasOrdenadas.length === 0 ? 0 : (paginaAtual - 1) * TAM_PAGINA + 1;
-  const fimIntervalo = Math.min(paginaAtual * TAM_PAGINA, linhasOrdenadas.length);
+  const inicioIntervalo = linhasOrdenadas.length === 0 ? 0 : (paginaAtual - 1) * tamPagina + 1;
+  const fimIntervalo = Math.min(paginaAtual * tamPagina, linhasOrdenadas.length);
 
   let contadorLinha = 0;
   const renderizarLinha = (linha: LinhaHistorico) => {
@@ -605,17 +620,16 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-sm">
-          <table className="w-full min-w-[1020px]">
+          <table className="w-full min-w-[860px]">
             <thead>
               <tr className="bg-azul/[0.04] border-b border-gray-200">
                 <CabecalhoOrdenavel label="Colaborador" coluna="nome" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Empresa" coluna="empresa" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
                 <CabecalhoOrdenavel label="Período" coluna="periodo" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} />
-                <CabecalhoOrdenavel label="Duração" coluna="dias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <CabecalhoOrdenavel label="RDOs" coluna="rdos" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <CabecalhoOrdenavel label="Status" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <CabecalhoOrdenavel label="Conclusão" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" />
-                <th className="py-3 px-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Ações</th>
+                <CabecalhoOrdenavel label="Duração" coluna="dias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" compacto />
+                <CabecalhoOrdenavel label="RDOs" coluna="rdos" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" compacto />
+                <CabecalhoOrdenavel label="Status" coluna="pendencias" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" compacto />
+                <CabecalhoOrdenavel label="Conclusão" coluna="percentual" ordenarPor={ordenarPor} ordemAsc={ordemAsc} aoClicar={aoClicarColuna} alinhamento="center" compacto />
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -623,7 +637,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                 ? gruposPorPessoa.map(([chave, grupo]) => (
                     <Fragment key={`grupo-${chave}`}>
                       <tr className="bg-navy/5">
-                        <td colSpan={8} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                        <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                           {grupo.nomeAtual} <span className="font-normal text-gray-400 normal-case">— {grupo.linhas.length} embarque{grupo.linhas.length === 1 ? "" : "s"}</span>
                         </td>
                       </tr>
@@ -637,7 +651,7 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
                     return (
                       <Fragment key={`grupo-${chave}`}>
                         <tr className="bg-navy/5">
-                          <td colSpan={8} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
+                          <td colSpan={7} className="px-4 py-2 text-xs font-bold text-navy uppercase tracking-wide">
                             <span className="inline-flex items-center gap-1.5">
                               {cor && <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cor }} />}
                               {obra?.nome || obra?.local_codigo || "Sem plataforma"}
@@ -659,30 +673,49 @@ export function TabelaHistorico({ linhas }: { linhas: LinhaHistorico[] }) {
       )}
 
       {modoAgrupamento === "nenhum" && linhasOrdenadas.length > 0 && (
-        <div className="flex items-center justify-between mt-4 text-sm text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 text-sm text-gray-500">
           <p>
             Exibindo {inicioIntervalo}–{fimIntervalo} de {linhasOrdenadas.length} registro{linhasOrdenadas.length === 1 ? "" : "s"}
           </p>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={paginaAtual === 1}
-              onClick={() => setPagina(paginaAtual - 1)}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="w-7 h-7 flex items-center justify-center rounded-md bg-navy text-white text-xs font-bold">
-              {paginaAtual}
-            </span>
-            <button
-              type="button"
-              disabled={paginaAtual === totalPaginas}
-              onClick={() => setPagina(paginaAtual + 1)}
-              className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              <ChevronRight size={14} />
-            </button>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1.5 text-xs text-gray-400">
+              Por página
+              <select
+                value={tamPagina}
+                onChange={(e) => {
+                  setTamPagina(Number(e.target.value));
+                  setPagina(1);
+                }}
+                className="border border-gray-200 rounded-md px-2 py-1 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-1 focus:ring-azul"
+              >
+                {OPCOES_TAM_PAGINA.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                disabled={paginaAtual === 1}
+                onClick={() => setPagina(paginaAtual - 1)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <span className="w-7 h-7 flex items-center justify-center rounded-md bg-navy text-white text-xs font-bold">
+                {paginaAtual}
+              </span>
+              <button
+                type="button"
+                disabled={paginaAtual === totalPaginas}
+                onClick={() => setPagina(paginaAtual + 1)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Calendar, ChevronDown } from "lucide-react";
+import { corDaEmpresa } from "@/components/SeletorEmpresas";
 
 type ValoresFiltro = {
   busca: string;
@@ -128,18 +129,29 @@ export function FiltroHistorico({
       {empresasCadastradas.length > 0 && (
         <div className="flex flex-col gap-1">
           <span className="text-xs text-gray-500 font-medium">Empresa</span>
-          <div className="inline-flex rounded-md border border-gray-200 overflow-hidden">
-            {empresasCadastradas.map((empresa, indice) => {
+          {/* 28/11 (pedido do Rafael): voltou a usar a cor própria de cada
+           * empresa (mesma função `corDaEmpresa` do SeletorEmpresas/coluna
+           * Empresa da tabela - por acaso ela já cai em roxo pra "hydra" e
+           * azul pra "infotec", exatamente o que ele queria) - só que num
+           * formato de pill mais compacto que o card antigo, pra não devolver
+           * aquele espaço horizontal que a gente acabou de cortar na tabela. */}
+          <div className="flex flex-wrap gap-1.5">
+            {empresasCadastradas.map((empresa) => {
               const ativa = empresas.has(empresa);
+              const cor = corDaEmpresa(empresa);
               return (
                 <button
                   key={empresa}
                   type="button"
                   onClick={() => alternarEmpresa(empresa)}
                   aria-pressed={ativa}
-                  className={`px-3.5 py-2 text-sm font-semibold capitalize cursor-pointer transition-colors whitespace-nowrap ${
-                    indice > 0 ? "border-l border-gray-200" : ""
-                  } ${ativa ? "bg-navy text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                  className="px-3.5 py-2 rounded-md text-sm font-bold capitalize cursor-pointer transition-all whitespace-nowrap border-2"
+                  style={{
+                    backgroundColor: cor.bg,
+                    color: cor.fg,
+                    borderColor: ativa ? cor.fg : "transparent",
+                    opacity: ativa ? 1 : 0.55,
+                  }}
                 >
                   {empresa}
                 </button>
